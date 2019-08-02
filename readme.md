@@ -10,7 +10,7 @@ The securitymetrics.org infrastructure contains three components:
 
 The hosts are built and configured using Ansible. All Amazon-related tasks are contained in the `amazon` role.
 
-_Note: the AWS instance of the securitymetrics archive is pre-production. A current "staging" version is running in [my personal block domain](http://staging.markerbench.com). It is not guaranteed to be stable._
+_Note: the AWS instance of the securitymetrics archive is pre-production. A current "staging" version is running in [my personal blog domain](http://staging.markerbench.com). It is not guaranteed to be stable._
 
 # Provisioning
 
@@ -62,7 +62,7 @@ The Ansible playbook `playbook.yml` configures the test, dev and prod production
 
 1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual.
 
-2. __Executes the `base`, `docker`, `keys`, `mailman`, and `import_archive` roles__ as required. In addition, for public mail servers, the playbook includes and runs the `update_dns` tasks from the `amazon` role to ensure that any MX, SPF or DMIM DNS records are updated. Details on each role follow in the next section.
+2. __Executes the `base`, `docker`, `keys`, `mailman`, and `import_archive` roles__ as required. In addition, for public mail servers, the playbook includes and runs the `update_dns` tasks from the `amazon` role to ensure that any MX, SPF or DKIM DNS records are updated. Details on each role follow in the next section.
 
 3. __After installation, removes developer tools__ to harden the machine (slightly).
 
