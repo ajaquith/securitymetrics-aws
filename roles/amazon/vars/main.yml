@@ -1,0 +1,8 @@
+aws_vpc_id: vpc-e9fad58d
+aws_vpc_subnet_id: subnet-d5e34a8d
+ec2_instance_ami: ami-0647412cf72f247d9                                         # Alpine Linux
+ec2_instance_type: t2.small
+ec2_ssh_key: '/Users/arj/.ssh/id_rsa.pub'
+ec2_ssh_key_name: Andy SSH
+ec2_volume_size_target: 5
+ec2_boto_profile: default

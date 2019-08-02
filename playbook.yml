@@ -1,0 +1,37 @@
+- hosts:  all
+  become: yes
+  gather_facts: no
+  no_log: no
+
+  pre_tasks:
+    - name: Bootstrap Python3 onto host
+      raw: test -e /usr/bin/python3 || (apk update && apk add python3)
+      register: output
+      changed_when: output.stdout != ""
+    - name: Gather facts
+      setup:
+
+  tasks:
+    - import_role:
+        name: base
+    - import_role:
+        name: docker
+    - import_role:
+        name: keys
+    - import_role:
+        name: mailman
+    - include_role:
+        name: amazon
+        tasks_from: update_dns
+        apply:
+          become: no
+      when: public_mail_server == true
+    - import_role:
+        name: import_archive
+      when: import_archive == true
+
+  post_tasks:
+    - name: Remove developer tools
+      apk:
+        name: ['gcc', 'make']
+        state: absent

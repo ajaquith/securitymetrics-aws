@@ -1,0 +1,8 @@
+.DS_Store
+.vagrant/
+playbook.retry
+temp/
+*.pyc
+**/__pycache__/
+etc/config.pck
+etc/discuss.mbox

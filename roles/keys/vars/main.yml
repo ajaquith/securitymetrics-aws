@@ -1,0 +1,11 @@
+acme_challenge_data: /opt/keys/acme/challenge
+acme_temp: /opt/keys/acme/tmp
+acme_tiny_install: /usr/local/share/acme-tiny
+certificate_data: /opt/keys/tls
+certificate_user: certs
+certificate_uid: 4000
+dkim_data: /opt/keys/dkim
+letsencrypt_account_dir: /opt/keys/acme/account
+self_signed_org: Snake Oil Testers
+self_signed_ou: Self-Signed Certificate Division
+self_signed_country: US

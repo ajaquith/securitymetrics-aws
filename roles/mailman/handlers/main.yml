@@ -1,0 +1,10 @@
+- name: Restart all containers
+  listen:
+    - Restart mailman-core
+    - Restart mailman-web
+    - Restart nginx
+    - Restart postfix
+    - Restart postgres
+  service:
+    name: docker
+    state: restarted

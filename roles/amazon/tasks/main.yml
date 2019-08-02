@@ -1,0 +1,214 @@
+- name: Upload SSH key to Amazon EC2
+  ec2_key:
+    name: "{{ ec2_ssh_key_name }}"
+    state: present
+    key_material: "{{ lookup('file', ec2_ssh_key) }}"
+
+- name: Get EC2 instance, elastic IP and security group facts
+  block:
+    - name: Get EC2 instance facts
+      ec2_instance_facts:
+        filters:
+          tag:Name: "{{ server_name }}"
+          tag:Environment: "{{ ec2_environment }}"
+          instance-state-name: [ "pending", "running", "shutting-down", "stopping", "stopped"]
+      register: ec2_instances
+    - name: Get EC2 elastic IP facts
+      ec2_eip_facts:
+        filters:
+          tag:Name: "{{ server_name }}"
+          tag:Environment: "{{ ec2_environment }}"
+      register: ec2_elastic_ips
+    - name: Create EC2 security group
+      ec2_group:
+        name: "{{ server_name }}"
+        description: SSH, SMTP/S, HTTP/S
+        vpc_id: "{{ aws_vpc_id }}"
+        rules:
+          - proto: tcp
+            ports:
+            - 22
+            cidr_ip: 0.0.0.0/0
+            rule_desc: SSH in
+          - proto: tcp
+            ports:
+            - 25
+            cidr_ip: 0.0.0.0/0
+            rule_desc: SMTP in
+          - proto: tcp
+            ports:
+            - 80
+            - 443
+            cidr_ip: 0.0.0.0/0
+            rule_desc: HTTP/S in
+        tags:
+          Name: "{{ server_name }}"
+          Environment: "{{ ec2_environment }}"
+      register: ec2_security_group
+    - set_fact:
+        ec2_security_group_id: "{{ ec2_security_group.group_id }}"
+
+- name: Create EC2 instance
+  block:
+    - ec2:
+        key_name: "{{ ec2_ssh_key_name }}"
+        image: "{{ ec2_instance_ami }}"
+        instance_type: "{{ ec2_instance_type }}"
+        group_id: "{{ ec2_security_group_id }}"
+        wait: yes
+        wait_timeout: 300
+        instance_tags:
+          Name: "{{ server_name }}"
+          Environment: "{{ ec2_environment }}"
+        monitoring: yes
+        vpc_subnet_id: "{{ aws_vpc_subnet_id }}"
+        assign_public_ip: no
+        user_data: "{{ lookup('file', 'ec2_init.sh') }}"
+        count_tag:
+          name: "{{ server_name }}"
+        exact_count: 1
+    - name: Refresh EC2 instance facts
+      ec2_instance_facts:
+        filters:
+          tag:Name: "{{ server_name }}"
+          tag:Environment: "{{ ec2_environment }}"
+          instance-state-name: [ "pending", "running", "shutting-down", "stopping", "stopped"]
+      register: new_ec2_instances
+    - set_fact:
+        ec2_instances: "{{ new_ec2_instances }}"
+  when: ec2_instances.instances[0] is undefined
+
+- name: Create EC2 elastic IP
+  block:
+    - name: Create Elastic IP
+      ec2_eip:
+        state: present
+      register: new_ec2_elastic_ip
+    - name: Tag Elastic IP
+      ec2_tag:
+        resource: "{{ new_ec2_elastic_ip.allocation_id }}"
+        state: present
+        tags:
+          Name: "{{ server_name }}"
+          Environment: "{{ ec2_environment }}"
+    - name: Refresh EC2 elastic IP facts
+      ec2_eip_facts:
+        filters:
+          tag:Name: "{{ server_name }}"
+          tag:Environment: "{{ ec2_environment }}"
+      register: new_ec2_elastic_ips
+    - set_fact:
+        ec2_elastic_ips: "{{ new_ec2_elastic_ips }}" 
+  when:
+    ec2_elastic_ips.addresses[0] is undefined
+
+- name: Get EC2 instance root volume
+  ec2_vol_facts:
+    filters:
+      volume-id: "{{ ec2_instances.instances[0].block_device_mappings[0].ebs.volume_id }}"
+  register: ec2_volumes
+
+- name: Save EC2 instance facts
+  set_fact:
+    ec2_instance_id: "{{ ec2_instances.instances[0].instance_id }}"
+    ec2_volume_id: "{{ ec2_volumes.volumes[0].id }}"
+    ec2_volume_device: "{{ ec2_volumes.volumes[0].attachment_set.device }}"
+    ec2_volume_type: "{{ ec2_volumes.volumes[0].type }}"
+    ec2_volume_size: "{{ ec2_volumes.volumes[0].size }}"
+    ec2_elastic_ip: "{{ ec2_elastic_ips.addresses[0].public_ip }}"
+    ec2_elastic_ip_id: "{{ ec2_elastic_ips.addresses[0].allocation_id }}"
+    ec2_private_ip: "{{ ec2_instances.instances[0].private_ip_address }}"
+
+- name: Print EC2 information
+  debug:
+    msg:
+      - "Name:              {{ server_name }}"
+      - "Instance ID:       {{ ec2_instance_id }}"
+      - "Volume ID:         {{ ec2_volume_id }}"
+      - "Volume device:     {{ ec2_volume_device }}"
+      - "Volume type:       {{ ec2_volume_type }}"
+      - "Volume size:       {{ ec2_volume_size }} GB"
+      - "Elastic IP:        {{ ec2_elastic_ip }}"
+      - "EIP allocation ID: {{ ec2_elastic_ip_id }}"
+      - "Private IP         {{ ec2_private_ip }}"
+      - "Security group iD: {{ ec2_security_group_id }}"
+
+- name: Tag EC2 root volume
+  ec2_tag:
+    resource: "{{ ec2_volume_id }}"
+    state: present
+    tags:
+      Name: "{{ server_name }}"
+      Environment: "{{ ec2_environment }}"
+
+- name: Associate Elastic IP with EC2 instance
+  ec2_eip:
+    ip: "{{ ec2_elastic_ip }}"
+    device_id: "{{ ec2_instance_id }}"
+    private_ip_address: "{{ ec2_private_ip }}"
+    allow_reassociation: yes
+
+- name: Register DNS A record for Elastic IP
+  route53:
+    state: present
+    zone: "{{ server_domain }}"
+    record: "{{ server_name }}"
+    type: A
+    ttl: 300
+    value: "{{ ec2_elastic_ip }}"
+    overwrite: yes
+    wait: yes
+
+- name: Resize EC2 boot volume
+  block:
+    - name: Stop EC2 instance
+      ec2:
+        instance_ids: "{{ ec2_instance_id }}"
+        state: stopped
+        wait: true
+    - name: Take temp snapshot of current EC2 volume
+      ec2_snapshot:
+        volume_id: "{{ ec2_volume_id }}"
+        description: Snapshot of initial volume
+    - name: Get snapshot ID
+      ec2_snapshot_facts:
+        filters:
+          volume-id: "{{ ec2_volume_id }}"
+      register: ec2_snapshots
+    - name: Detach current EC2 volume
+      ec2_vol:
+        id: "{{ ec2_volume_id }}"
+        instance: None
+    - name: Create larger volume from snapshot, and attach to EC2 instance
+      ec2_vol:
+        snapshot: "{{ ec2_snapshots.snapshots[0].snapshot_id }}"
+        instance: "{{ ec2_instance_id }}"
+        device_name: "{{ ec2_volume_device }}"
+        volume_type: "{{ ec2_volumes.volumes[0].type }}"
+        volume_size: "{{ ec2_volume_size_target }}"
+        delete_on_termination: no
+        tags:
+          Name: "{{ server_name }}"
+          Environment: "{{ ec2_environment }}"
+      register: new_ec2_volume
+    - name: Restart EC2 instance with resized volume
+      ec2:
+        instance_ids: '{{ ec2_instance_id }}'
+        state: running
+        user_data: "{{ lookup('template', 'ec2_resize_boot_volume.sh') }}"
+        wait: true
+    - name: Delete temp snapshot
+      ec2_snapshot:
+        snapshot_id: "{{ ec2_snapshots.snapshots[0].snapshot_id }}"
+        state: absent
+    - name: Delete old volume
+      ec2_vol:
+        id: "{{ ec2_volume_id }}"
+        state: absent
+    - name: Save new EC2 volume ID
+      set_fact:
+        ec2_volume_id: "{{ new_ec2_volume.volume_id }}"
+    - name: Post-install tasks
+      debug:
+        msg: "To complete installation: ssh alpine@{{ server_name }} and run: sudo resize2fs {{ ec2_volume_device }}"
+  when: ec2_volume_size|int < ec2_volume_size_target|int

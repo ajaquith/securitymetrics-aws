@@ -1,0 +1,229 @@
+- name: Install Ansible 'openssl' module dependencies
+  apk:
+    name: ['gcc', 'libc-dev', 'libffi-dev', 'openssl-dev', 'python3-dev']
+    state: present
+
+- name: Install PyOpenSSL
+  pip:
+    name: ['pyopenssl']
+
+- name: "Add group '{{ certificate_user }}' (gid={{ certificate_uid }})"
+  group:
+    name: "{{ certificate_user }}"
+    state: present
+    gid: "{{ certificate_uid }}"
+
+- name: "Add user '{{ certificate_user }}' (uid={{ certificate_uid }})"
+  user:
+    name: "{{ certificate_user }}"
+    state: present
+    create_home: yes
+    home: "{{ certificate_data }}"
+    shell: /sbin/nologin
+    group: "{{ certificate_user }}"
+    uid: "{{ certificate_uid }}"
+
+# Generate self-signed TLS certificates
+
+- name: "Set certificate directory permissions"
+  file:
+    path: "{{ certificate_data }}"
+    state: directory
+    owner: "{{ certificate_user }}"
+    group: "{{ certificate_user }}"
+    mode: "u=rwx,g=rx,o="
+
+- name: Generate private key for certificate
+  openssl_privatekey:
+    path: "{{ certificate_data }}/privkey.pem"
+    owner: "{{ certificate_user }}"
+    group: "{{ certificate_user }}"
+    mode: "u=rw,g=r,o="
+
+- name: Create request for self-signed certificate
+  openssl_csr:
+    common_name: "{{ server_name }}"
+    country_name: "{{self_signed_country }}"
+    organization_name: "{{ self_signed_org }}"
+    organizational_unit_name: "{{ self_signed_ou }}"
+    privatekey_path: "{{ certificate_data }}/privkey.pem"
+    path: "{{ certificate_data }}/selfsigned-csr.pem"
+    owner: "{{ certificate_user }}"
+    group: "{{ certificate_user }}"
+    mode: "u=rw,g=r,o="
+
+- name: Generate self-signed certificate
+  openssl_certificate:
+    provider: selfsigned
+    csr_path: "{{ certificate_data }}/selfsigned-csr.pem"
+    privatekey_path: "{{ certificate_data }}/privkey.pem"
+    path: "{{ certificate_data }}/fullchain.pem"
+    owner: "{{ certificate_user }}"
+    group: "{{ certificate_user }}"
+    mode: "u=rw,g=r,o="
+    force: no
+  notify: New certificates
+
+# Generate DKIM keys
+
+- name: "Create DKIM keys directory {{ dkim_data }}"
+  file:
+    path: "{{ dkim_data }}"
+    state: directory
+    mode: "u=rx,g=rx,o="
+
+- name: Generate DKIM private key
+  openssl_privatekey:
+    path: "{{ dkim_data }}/{{ server_domain }}.private"
+    type: RSA
+    size: 2048
+    mode: "u=r,g=r,o="
+    force: no
+    
+- name: Generate DKIM public key
+  openssl_publickey:
+    path: "{{ dkim_data }}/{{ server_domain }}.public"
+    privatekey_path: "{{ dkim_data }}/{{ server_domain }}.private"
+    format: "PEM"
+    mode: "u=r,g=r,o="
+    force: no
+
+- name: Get DKIM public key contents
+  command: "cat {{ dkim_data }}/{{ server_domain }}.public"
+  register: dkim_public_key
+
+# See https://help.returnpath.com/hc/en-us/articles/222481088-DKIM-DNS-record-overview
+- name: Save DKIM DNS record
+  copy:
+    content: "{{ dkim_public_key.stdout | dkim_record }}"
+    dest: "{{ dkim_data }}/{{ server_domain }}.txt"
+    mode: "u=r,g=r,o="
+
+# Generate Let's Encrypt TLS certificates
+
+- name: Get current certificate info
+  openssl_certificate_info:
+    path: "{{ certificate_data }}/fullchain.pem"
+    valid_at:
+      in_one_month: "+30d"
+  register: tls_certificate
+
+- name: Install Let's Encrypt dependencies
+  block:
+    - name: Install OpenSSL
+      apk:
+        name: ['openssl']
+        state: present
+
+    - name: Get acme-tiny
+      git:
+        repo: https://github.com/diafygi/acme-tiny.git
+        dest: "{{ acme_tiny_install }}"
+
+    - name: Install acme-tiny binary
+      command: python3 setup.py install
+      args:
+        chdir: "{{ acme_tiny_install }}"
+        creates: /usr/bin/acme-tiny
+
+    - name: "Create Let's Encrypt account directory {{ letsencrypt_account_dir }}"
+      file:
+        path: "{{ letsencrypt_account_dir }}"
+        state: directory
+        owner: "{{ certificate_user }}"
+        group: "{{ certificate_user }}"
+        mode: "u=rwx,g=rx,o=rx"
+
+    - name: Copy Let's Encrypt account key
+      copy:
+        content: "{{ letsencrypt_private_key }}"
+        decrypt: yes
+        dest: "{{ letsencrypt_account_dir }}/account.key"
+        owner: "{{ certificate_user }}"
+        group: "{{ certificate_user }}"
+        mode: "u=r,g=r,o="
+
+    - name: Copy ACME renewal script
+      template:
+        src: renew_certs.sh
+        dest: "{{ letsencrypt_account_dir }}/"
+        owner: "{{ certificate_user }}"
+        group: "{{ certificate_user }}"
+        mode: "u=rx,g=rx,o="
+
+    - name: "Create ACME challenge directory {{ acme_challenge_data }}"
+      file:
+        path: "{{ acme_challenge_data }}"
+        state: directory
+        owner: "{{ certificate_user }}"
+        group: "{{ certificate_user }}"
+        mode: "u=rwx,g=rx,o=rx"
+        
+    - name: Schedule monthly Let's Encrypt certificate renewals
+      cron:
+        name: "Monthly ACME renewal"
+        minute: "0"
+        hour: "0"
+        day: "1"
+        job:  "{{ letsencrypt_account_dir }}/renew_certs.sh 2>> /var/log/acme_tiny.log"
+  when: letsencrypt_certificates == true
+
+- name: Generate Let's Encrypt certificates
+  block:
+    - name: Create request for Let's Encrypt TLS certificate
+      openssl_csr:
+        path: "{{ certificate_data }}/letsencrypt-csr.pem"
+        privatekey_path: "{{ certificate_data }}/privkey.pem"
+        common_name: "{{ server_name }}"
+        owner: "{{ certificate_user }}"
+        group: "{{ certificate_user }}"
+        mode: "u=r,g=r,o="
+        
+    - name: Create temporary ACME config directory for nginx
+      file:
+        path: "{{ acme_temp }}"
+        state: directory
+        mode: "u=rx,g=rx,o=rx"
+    
+    - name: Configure temporary ACME config for nginx
+      template:
+        src: nginx.conf
+        dest: "{{ acme_temp }}/"
+        mode: "u=r,g=r,o=r"
+    
+    - name: Start temporary web server
+      docker_container:
+        name: nginx-acme
+        image: nginx:mainline-alpine
+        detach: yes
+        state: started
+        ports: "80:80"
+        volumes:
+          - "{{ acme_temp }}:/etc/nginx:ro"
+          - "{{ acme_challenge_data }}:/var/www/acme:ro"
+    
+    - name: Generate Let's Encrypt TLS certificate
+      openssl_certificate:
+        provider: acme
+        acme_accountkey_path: "{{ letsencrypt_account_dir }}/account.key"
+        acme_challenge_path: "{{ acme_challenge_data }}"
+        path: "{{ certificate_data }}/fullchain.pem"
+        csr_path: "{{ certificate_data }}/letsencrypt-csr.pem"
+        privatekey_path: "{{ certificate_data }}/privkey.pem"
+        owner: "{{ certificate_user }}"
+        group: "{{ certificate_user }}"
+        mode: "u=r,g=r,o="
+        force: yes
+        backup: yes
+      notify: New certificates
+      
+    - name: Stop temporary web server
+      docker_container:
+        name: nginx-acme
+        state: absent
+        purge_networks: yes
+        keep_volumes: no
+
+  when: letsencrypt_certificates == true and 
+        (tls_certificate.issuer.organizationName == self_signed_org or
+        tls_certificate.valid_at.in_one_month == false)

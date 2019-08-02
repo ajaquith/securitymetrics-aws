@@ -1,0 +1,100 @@
+- name: Install Docker
+  apk:
+    name: docker
+    state: present
+
+- name: Install Docker Compose dependencies
+  apk:
+    name: ['gcc', 'libc-dev', 'libffi-dev', 'make', 'openssl-dev', 'python3-dev']
+    state: present
+
+- name: Install Docker Python libraries
+  pip:
+    name: ['docker-compose']
+
+- name: "Add Docker remap group '{{ docker_remap_user }}'"
+  group: 
+    name: "{{ docker_remap_user }}"
+    state: present
+    system: yes
+  notify: Restart Docker
+
+- name: "Add Docker remap user '{{ docker_remap_user }}'"
+  user: 
+    name: "{{ docker_remap_user }}"
+    state: present
+    create_home: no
+    home:
+    shell: /sbin/nologin
+    system: yes
+  notify: Restart Docker
+
+- name: Configure Docker user and group remappings
+  template:
+    src: "{{ item }}"
+    dest: /etc
+    mode: "a=r"
+  with_items:
+    - subuid
+    - subgid
+  notify: Restart Docker
+
+- name: "Remap Docker root group '{{ docker_root_user }}' (gid={{ docker_root_uid }})"
+  group: 
+    name: "{{ docker_root_user }}"
+    state: present
+    system: yes
+    gid: "{{ docker_root_uid }}"
+
+- name: "Remap Docker root user '{{ docker_root_user }}' (uid={{ docker_root_uid }})"
+  user:
+    name: "{{ docker_root_user }}"
+    state: present
+    create_home: no
+    home:
+    shell: /sbin/nologin
+    group: "{{ docker_root_user }}"
+    uid: "{{ docker_root_uid }}"
+
+- name: "Remap Docker unprivileged groups (gid={{ docker_root_uid + 100 }}-{{ docker_root_uid + 103 }})"
+  group: 
+    name: "{{ docker_unpriv_user }}{{ item }}"
+    state: present
+    system: yes
+    gid: "{{ docker_root_uid + item }}"
+  with_items:
+    - 100
+    - 101
+    - 102
+    - 103
+
+- name: "Remap Docker unprivileged users (uid={{ docker_root_uid + 100 }}-{{ docker_root_uid + 103 }})"
+  user:
+    name: "{{ docker_unpriv_user }}{{ item }}"
+    state: present
+    create_home: no
+    home:
+    shell: /sbin/nologin
+    group: "{{ docker_unpriv_user }}{{ item }}"
+    uid: "{{ docker_root_uid + item }}"
+  with_items:
+    - 100
+    - 101
+    - 102
+    - 103
+
+- name: Configure Docker daemon
+  template:
+    src: daemon.json
+    dest: /etc/docker/
+    mode: "u=rw,g=r,o=r"
+  notify: Restart Docker
+
+- name: Enable Docker service
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Force any notified handlers to run now
+  meta: flush_handlers

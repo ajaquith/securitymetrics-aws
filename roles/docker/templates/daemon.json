@@ -1,0 +1,8 @@
+{
+        "icc": false,
+        "live-restore": true,
+        "log-driver": "json-file",
+        "log-level": "info",
+        "no-new-privileges": true,
+        "userns-remap": "{{ docker_remap_user }}"
+}

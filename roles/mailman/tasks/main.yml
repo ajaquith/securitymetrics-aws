@@ -1,0 +1,276 @@
+- name: "Add Postgres remap group 'dpostgres'"
+  group: 
+    name: dpostgres
+    state: present
+    gid: "{{ docker_root_uid + 70 }}"
+
+- name: "Add Postgres remap user 'dpostgres'"
+  user: 
+    name: dpostgres
+    state: present
+    create_home: yes
+    home: "{{ postgres_data }}"
+    shell: /bin/sh
+    group: dpostgres
+    uid: "{{ docker_root_uid + 70 }}"
+
+- name: "Create Postgres data directory {{ postgres_data }}"
+  file:
+    path: "{{ postgres_data }}/"
+    state: directory
+    owner: dpostgres
+    group: dpostgres
+    mode: "u=rwx,g=,o="
+
+- name: "Create Mailman core directory {{ mailman_core }}"
+  file:
+    path: "{{ mailman_core }}/"
+    state: directory
+    owner: drun100
+    group: "{{ docker_root_user }}"
+    mode: "u=rwx,g=rx,o="
+
+- name: "Create Mailman var directory {{ mailman_core }}/var"
+  file:
+    path: "{{ mailman_core }}/var/"
+    state: directory
+    owner: drun100
+    group: "{{ docker_root_user }}"
+    mode: "u=rwx,g=rx,o="
+
+- name: "Create Mailman mailbox mappings directory {{ mailman_core }}/var/data"
+  file:
+    path: "{{ mailman_core }}/var/data/"
+    state: directory
+    owner: drun100
+    group: drun101
+    mode: "u=rwx,g=srx,o="
+
+- name: Configure Mailman core
+  template:
+    src: mailman-extra.cfg
+    dest: "{{ mailman_core }}/"
+    owner: drun100
+    group: "{{ docker_root_user }}"
+    mode: "u=r,g=r,o="
+  notify: Restart mailman-core
+
+- name: "Create Mailman web directory {{ mailman_web_data }}"
+  file:
+    path: "{{ mailman_web_data }}/"
+    state: directory
+    owner: drun100
+    group: drun101
+    mode: "u=rwx,g=rx,o="
+
+- name: Configure Mailman web
+  template:
+    src: settings_local.py
+    dest: "{{ mailman_web_data }}/"
+    owner: drun100
+    group: drun101
+    mode: "u=r,g=r,o="
+  notify: Restart mailman-web
+
+- name: "Create Postfix init, data and log directories {{ postfix_init }} {{ postfix_data }} {{ postfix_log }}"
+  file:
+    path: "{{ item }}/"
+    state: directory
+    owner: "{{ docker_root_user }}"
+    group: "{{ docker_root_user }}"
+    mode: "u=rwx,g=x,o=x"
+  with_items:
+    - "{{ postfix_init }}"
+    - "{{ postfix_data }}"
+    - "{{ postfix_log }}"
+
+- name: Configure Postfix
+  template:
+    src: configure_postfix.sh
+    dest: "{{ postfix_init }}/"
+    owner: drun100
+    group: "{{ docker_root_user }}"
+    mode: "u=r,g=,o="
+  notify: Restart postfix
+
+- name: "Add Postfix and nginx runtime users to '{{ certificate_user }}' and mailman groups"
+  user:
+    name: "{{ item }}"
+    groups:
+      - "{{ certificate_user }}"
+      - drun101
+    append: yes
+  with_items:
+    - drun100
+    - "{{ docker_root_user }}"
+    
+- name: "Set DKIM keys directory {{ dkim_data }} ownership to container 'opendkim'"
+  file:
+    path: "{{ dkim_data }}"
+    state: directory
+    owner: drun102
+    group: drun103
+    recurse: yes
+    
+- name: "Create Nginx directory {{ nginx_conf }}/conf.d/"
+  file:
+    path: "{{ nginx_conf }}/conf.d/"
+    state: directory
+    owner: "{{ docker_root_user }}"
+    group: "{{ docker_root_user }}"
+    mode: "u=rx,g=rx,o="
+
+- name: Configure Nginx
+  template:
+    src: "{{ item.name }}"
+    dest: "{{ nginx_conf }}/{{ item.dest }}"
+    owner: "{{ docker_root_user }}"
+    group: "{{ docker_root_user }}"
+    mode: "u=r,g=r,o="
+  with_items:
+    - { name: 'nginx.conf',   dest: '/' }
+    - { name: 'mime.types',   dest: '/' }
+    - { name: 'uwsgi_params', dest: '/' }
+    - { name: 'mailman.conf', dest: '/conf.d/' }
+  notify: Restart nginx
+
+- name: "Create Docker comtainers"
+  docker_compose:
+    project_name: mailman
+    state: present
+    remove_orphans: yes
+    definition:
+      version: '2'
+      services:
+
+        mailman-core:
+          image: maxking/mailman-core
+          container_name: mailman-core
+          hostname: mailman-core
+          restart: always
+          depends_on:
+          - postgres
+          volumes:
+          - "{{ mailman_core }}:/opt/mailman"
+          environment:
+          - "DATABASE_CLASS=mailman.database.postgresql.PostgreSQLDatabase"
+          - "DATABASE_TYPE=postgres"
+          - "DATABASE_URL=postgres://{{ postgres_user }}:{{ postgres_password }}@{{ mailman_db_host }}/{{ postgres_db }}"
+          - "HYPERKITTY_API_KEY={{ hyperkitty_api_key }}"
+          - "HYPERKITTY_URL=http://{{ mailman_web_host }}:8000/hyperkitty/"
+          - "MAILMAN_REST_URL=http://{{ mailman_core_host }}:8001"
+          - "MAILMAN_REST_USER={{ mailman_rest_user }}"
+          - "MAILMAN_REST_PASSWORD={{ mailman_rest_password }}"
+          - "MTA=postfix"
+          - "SMTP_HOST={{ postfix_host }}"
+          stop_grace_period: 30s
+          networks:
+            mailman:
+              ipv4_address: "{{ mailman_core_host }}"
+
+        mailman-web:
+          image: maxking/mailman-web
+          container_name: mailman-web
+          hostname: mailman-web
+          restart: always
+          depends_on:
+          - mailman-core
+          - postgres
+          - postfix
+          volumes:
+          - "{{ mailman_web_data }}:/opt/mailman-web-data"
+          environment:
+          - "DATABASE_TYPE=postgres"
+          - "DATABASE_URL=postgres://{{ postgres_user }}:{{ postgres_password }}@{{ mailman_db_host }}/{{ postgres_db }}"
+          - "DJANGO_ALLOWED_HOSTS={{ server_name }}"
+          - "HYPERKITTY_API_KEY={{ hyperkitty_api_key }}"
+          - "HYPERKITTY_URL=http://{{ mailman_web_host }}:8000/hyperkitty/"
+          - "MAILMAN_ADMIN_USER={{ mailman_admin }}"
+          - "MAILMAN_ADMIN_EMAIL={{ mailman_admin_email }}"
+          - "MAILMAN_REST_URL=http://{{ mailman_core_host }}:8001"
+          - "MAILMAN_REST_USER={{ mailman_rest_user }}"
+          - "MAILMAN_REST_PASSWORD={{ mailman_rest_password }}"
+          - "MAILMAN_HOST={{ mailman_core_host }}"
+          - "POSTORIUS_TEMPLATE_BASE_URL=http://{{ mailman_web_host }}:8000"
+          - "SECRET_KEY={{ django_secret_key }}"
+          - "SERVE_FROM_DOMAIN={{ server_domain }}"
+          - "SMTP_HOST={{ postfix_host }}"
+          - "UWSGI_STATIC_MAP=/static=/opt/mailman-web-data/static"
+          networks:
+            mailman:
+              ipv4_address: "{{ mailman_web_host }}"
+
+        postgres:
+          user: postgres
+          image: postgres:9.6-alpine
+          container_name: postgres
+          hostname: postgres
+          restart: always
+          volumes:
+          - "{{ postgres_data }}:/var/lib/postgresql/data"
+          environment:
+          - "POSTGRES_DB={{ postgres_db }}"
+          - "POSTGRES_USER={{ postgres_user }}"
+          - "POSTGRES_PASSWORD={{ postgres_password }}"
+          networks:
+            mailman:
+              ipv4_address: "{{ mailman_db_host }}"
+
+        postfix:
+          image: boky/postfix
+          container_name: postfix
+          hostname: postfix
+          restart: always
+          depends_on:
+          - mailman-core
+          volumes:
+          - "{{ postfix_data }}:/var/spool/postfix"
+          - "{{ postfix_log }}:/var/log/postfix"
+          - "{{ certificate_data }}:/etc/tls:ro"
+          - "{{ dkim_data }}:/etc/opendkim/keys:ro"
+          - "{{ mailman_core }}/var/data:/var/data/mailman:ro"
+          - "{{ postfix_init }}:/docker-init.db:ro"
+          ports:
+            - "25:587"
+          environment:
+          - "HOSTNAME={{ server_name }}"
+          - "MYNETWORKS={{ docker_subnet }} 127.0.0.0/8"
+          - "ALLOWED_SENDER_DOMAINS={{ server_domain }}"
+          - "MASQUERADED_DOMAINS={{ server_domain }}"
+          - "MESSAGE_SIZE_LIMIT=102400"
+          networks:
+            mailman:
+              ipv4_address: "{{ postfix_host }}"
+
+        nginx:
+          image: nginx:mainline-alpine
+          container_name: nginx
+          hostname: nginx
+          restart: always
+          depends_on:
+          - mailman-web
+          volumes:
+          - "{{ nginx_log }}:/var/log/nginx"
+          - "{{ acme_challenge_data }}:/var/www/acme:ro"
+          - "{{ certificate_data }}:/etc/tls:ro"
+          - "{{ mailman_web_data }}:/opt/mailman-web-data:ro"
+          - "{{ nginx_conf }}:/etc/nginx:ro"
+          - "{{ nginx_html }}:/usr/share/nginx/html:ro"
+          ports:
+            - "80:80"
+            - "443:443"
+          networks:
+            mailman:
+              ipv4_address: "{{ nginx_host }}"
+
+      networks:
+         mailman:
+           driver: bridge
+           ipam:
+             driver: default
+             config:
+             - subnet: "{{ docker_subnet }}"
+
+- name: Regenerate Mailman aliases
+  command: "docker exec mailman-core bash -l -c 'mailman aliases --directory /opt/mailman/var/data/'"
+  ignore_errors: yes

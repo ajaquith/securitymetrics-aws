@@ -1,0 +1,78 @@
+- name: Install base packages
+  apk:
+    name: ['audit', 'curl', 'chrony', 'git', 'net-tools', 'rsyslog', 'tzdata']
+    state: present
+
+- name: Stop Busybox syslog
+  service:
+    name: syslog
+    enabled: false
+    state: stopped
+
+- name: Confiure sshd
+  template:
+    src: sshd_config
+    dest: /etc/ssh/
+    mode: "u=rw,g=r,o="
+  notify: Restart sshd
+
+- name: Configure ntp
+  template:
+    src: chrony.conf
+    dest: /etc/chrony/
+    mode: "a=r"
+  notify: Restart ntp
+
+- name: Configure rsyslog
+  template:
+    src: rsyslog.conf
+    dest: /etc/
+    mode: "u=rw,g=r,o="
+  notify: Restart rsyslog
+
+- name: Enable ntp and rsyslog services
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  with_items:
+    - chronyd
+    - rsyslog
+  notify: Restart rsyslog
+
+- name: Install and configure mDNS responder (dev hosts only)
+  block:
+    - name: Install mDNS packages
+      apk:
+        name: ['avahi', 'dbus']
+        state: present
+    - name: Configure mDNS
+      template:
+        src: avahi-daemon.conf
+        dest: /etc/avahi/
+        mode: "a=r"
+      notify: Restart Avahi
+    - name: Enable mDNS service
+      service:
+        name: avahi-daemon
+        state: started
+        enabled: yes
+  when: "'dev' in group_names"
+
+- name: Enable swap memory limits
+  ini_file:
+    path: /etc/update-extlinux.conf
+    section: null
+    state: present
+    no_extra_spaces: yes
+    option: default_kernel_opts
+    value: '"quiet rootfstype=ext4 cgroup_enable=memory swapaccount=1"'
+  notify: Update extlinux
+
+- name: Set hostname
+  hostname:
+    name: "{{ server_name }}"
+  notify: Reboot host
+
+- name: Force any notified handlers to run now
+  meta: flush_handlers

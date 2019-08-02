@@ -1,0 +1,4 @@
+docker_remap_user: dremap
+docker_root_user: droot
+docker_root_uid: 3000
+docker_unpriv_user: drun

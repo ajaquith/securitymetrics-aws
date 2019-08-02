@@ -1,0 +1,5 @@
+- name: Restart Docker
+  listen: New certificates
+  service:
+    name: docker
+    state: restarted

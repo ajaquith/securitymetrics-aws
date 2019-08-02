@@ -1,0 +1,46 @@
+- name: Get AWS credentials
+  set_fact:
+    aws_access_key: "{{ lookup('ini', 'aws_access_key_id section=default file=~/.aws/credentials') }}"
+    aws_secret_key: "{{ lookup('ini', 'aws_secret_access_key section=default file=~/.aws/credentials') }}"
+
+- name: Register DNS MX record for EC2 host
+  local_action:
+    module: route53
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    state: present
+    zone: "{{ server_domain }}"
+    record: "{{ server_domain }}"
+    type: MX
+    ttl: 300
+    value: "10 {{ server_name }}."
+    overwrite: yes
+    wait: yes
+
+- name: "Register SPF record for {{ server_domain }}"
+  local_action:
+    module: route53
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    state: present
+    zone: "{{ server_domain }}"
+    record: "{{ server_domain }}"
+    type: TXT
+    ttl: 3600
+    value: '"v=spf1 mx -all"'
+    overwrite: yes
+    wait: yes
+
+- name: "Register DKIM record"
+  local_action:
+    module: route53
+    aws_access_key: "{{ aws_access_key }}"
+    aws_secret_key: "{{ aws_secret_key }}"
+    state: present
+    zone: "{{ server_domain }}"
+    record: "mail._domainkey.{{ server_domain }}"
+    type: TXT
+    ttl: 3600
+    value: "{{ dkim_public_key.stdout | dkim_record }}"
+    overwrite: yes
+    wait: yes

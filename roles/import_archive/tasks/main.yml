@@ -1,0 +1,36 @@
+
+- name: Check if archives have been imported
+  stat:
+    path: "{{ mailman_core }}/archive.imported"
+  register: archive_imported
+
+- name: Import Mailman archives
+  block:
+    - name: Copy mailing list config
+      copy:
+        src: etc/config.pck
+        dest: "{{ mailman_core }}"
+        mode: "u=r,g=r,o="
+    - name: Copy mailing list archives
+      copy:
+        src: etc/discuss.mbox
+        dest: "{{ mailman_web_data }}"
+        mode: "u=r,g=r,o="
+    - name: Create mailing list
+      command: "docker exec mailman-core bash -l -c 'mailman create discuss@{{ server_domain }}'"
+      register: list.create
+    - name: Import mailing list config
+      command: "docker exec mailman-core bash -l -c 'mailman import21 discuss@{{ server_domain }} config.pck'"
+      register: list.import
+    - name: Import mailing list archives
+      command: "docker exec mailman-web bash -l -c 'python3 manage.py hyperkitty_import -l discuss@{{ server_domain }} ../mailman-web-data/discuss.mbox'"
+      register: archive.import
+    - name: Index mailing list archives
+      command: "docker exec mailman-web bash -l -c 'python3 manage.py update_index_one_list discuss@{{ server_domain }}'"
+      register: archive.index
+    - name: Leave memento
+      file:
+        path: "{{ mailman_core }}/archive.imported"
+        state: touch
+  when:
+    - archive_imported.stat.exists == false

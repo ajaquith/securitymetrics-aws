@@ -1,0 +1,28 @@
+- name: Restart Avahi
+  service:
+    name: avahi-daemon
+    state: restarted
+
+- name: Restart ntp
+  service:
+    name: chronyd
+    state: restarted
+
+- name: Restart rsyslog
+  service:
+    name: rsyslog
+    state: restarted
+
+- name: Restart sshd
+  service:
+    name: sshd
+    state: restarted
+
+- name: Update extlinux
+  command: /sbin/update-extlinux
+  notify: Reboot host
+
+- name: Reboot host
+  listen: Update extlinux
+  reboot:
+    reboot_timeout: 300
