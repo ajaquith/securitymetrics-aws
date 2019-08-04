@@ -11,6 +11,7 @@
 postconf -e disable_vrfy_command=yes
 postconf -e smtpd_relay_restrictions=permit_mynetworks,reject_unauth_destination
 postconf -e relay_domains={{ server_domain }},regexp:/var/data/mailman/postfix_domains
+postconf -e mydestination=localhost,localhost.{{ server_domain }},{{ server_name }},{{ server_domain }}
 echo "Configuring Postfix for use with Mailman."
 postconf -e recipient_delimiter=+
 postconf -e unknown_local_recipient_reject_code=550
