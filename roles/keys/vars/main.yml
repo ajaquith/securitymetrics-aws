@@ -4,6 +4,7 @@ acme_tiny_install: /usr/local/share/acme-tiny
 certificate_data: /opt/keys/tls
 certificate_user: certs
 certificate_uid: 4000
+tls_key_size: 4096
 dkim_data: /opt/keys/dkim
 letsencrypt_account_dir: /opt/keys/acme/account
 self_signed_org: Snake Oil Testers

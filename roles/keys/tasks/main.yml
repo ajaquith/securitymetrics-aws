@@ -36,6 +36,7 @@
 - name: Generate private key for certificate
   openssl_privatekey:
     path: "{{ certificate_data }}/privkey.pem"
+    size: "{{ tls_key_size }}"
     owner: "{{ certificate_user }}"
     group: "{{ certificate_user }}"
     mode: "u=rw,g=r,o="
@@ -63,6 +64,14 @@
     mode: "u=rw,g=r,o="
     force: no
   notify: New certificates
+
+- name: Generate Diffie-Hellman parameters for TLS
+  openssl_dhparam:
+    path: "{{ certificate_data }}/dhparams.pem"
+    size: "{{ tls_key_size }}"
+    owner: "{{ certificate_user }}"
+    group: "{{ certificate_user }}"
+    mode: "u=rw,g=r,o="
 
 # Generate DKIM keys
 
@@ -159,12 +168,12 @@
         group: "{{ certificate_user }}"
         mode: "u=rwx,g=rx,o=rx"
         
-    - name: Schedule monthly Let's Encrypt certificate renewals
+    - name: Schedule weekly check for Let's Encrypt certificate renewals
       cron:
         name: "Monthly ACME renewal"
         minute: "0"
-        hour: "0"
-        day: "1"
+        hour: "1"
+        weekday: "6"
         job:  "{{ letsencrypt_account_dir }}/renew_certs.sh 2>> /var/log/acme_tiny.log"
   when: letsencrypt_certificates == true
 
