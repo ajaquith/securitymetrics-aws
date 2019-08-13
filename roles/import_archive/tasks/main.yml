@@ -8,12 +8,12 @@
   block:
     - name: Copy mailing list config
       copy:
-        src: etc/config.pck
+        src: etc/local/config.pck
         dest: "{{ mailman_core }}"
         mode: "u=r,g=r,o="
     - name: Copy mailing list archives
       copy:
-        src: etc/discuss.mbox
+        src: etc/local/discuss.mbox
         dest: "{{ mailman_web_data }}"
         mode: "u=r,g=r,o="
     - name: Create mailing list

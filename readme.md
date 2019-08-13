@@ -60,7 +60,7 @@ The production site is not running yet.
 
 The Ansible playbook `playbook.yml` configures the test, dev and prod production machines in three steps. The playbook:
 
-1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual.
+1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual. If the string `amazon` is found in the Ansible host fact `ansible_bios_version`, the variable `is_ec2_environment` is set to `true` so that other tasks can use it.
 
 2. __Executes the `base`, `docker`, `keys`, `mailman`, and `import_archive` roles__ as required. In addition, for public mail servers, the playbook includes and runs the `update_dns` tasks from the `amazon` role to ensure that any MX, SPF or DKIM DNS records are updated. Details on each role follow in the next section.
 
@@ -70,7 +70,7 @@ All roles execute on target hosts with elevated (root) privileges. We use the st
 
 ## The `base` role
 
-The `base` role installs all of the essential services needed for a basic machine, other its core applications. Essential services include logging, job scheduling (`cron`), network time protocol (NTP), and remote login (SSH). For hosts in the `dev` group, the `base` role also installs multicast DNS so that it can be easily discovered and connected to on the local network. Specifically, the role:
+The `base` role installs all of the essential services needed for a basic machine, other its core applications. Essential services include logging, job scheduling (`cron`), network time protocol (NTP), and remote login (SSH). For hosts with names ending in `.local`, the `base` role also installs multicast DNS so that it can be easily discovered and connected to on the local network. Specifically, the role:
 
 1. Using `apk`, installs the `audit`, `chrony` (NTP), `curl`, `git`, `net-tools` (`netstat` etc), `rsyslog` (logging) and `tzdata` packages.
 
@@ -84,7 +84,7 @@ The `base` role installs all of the essential services needed for a basic machin
 
 6. Enables the NTP and syslog services (`chronyd` and `rsyslog`) and requires them to start at bootup.
 
-7. For hosts in the `dev` group only, configures the Avahi multicast DNS responder (mDNS) so that local VMs can be connected or browsed to by their local host names, for example (`devbox.local`).  The templated `avahi-daemon.conf` is copied to `/etc/avahi`.
+7. For hosts with nanes ending in `.local`, configures the Avahi multicast DNS responder (mDNS) so that local VMs can be connected or browsed to by their local host names, for example (`devbox.local`).  The templated `avahi-daemon.conf` is copied to `/etc/avahi`.
 
 8. Configures the host's kernel to use swap-memory limits, an important feature for Docker. As described in the [Alpine wiki](https://wiki.alpinelinux.org/wiki/Docker), the playbook adds the `cgroup_enable=memory swapaccount=1` to the `extlinux` configuration (`/etc/update-extlinux.conf`), and notifies Ansible to reboot the host if the values changed.
 
@@ -188,7 +188,7 @@ The `mailman` role is complex. It performs the following tasks:
 
 ## The `amazon` role's `update_dns` tasks
 
-For Amazon servers running a mail server, the `update_dns` tasks creates a DKIM record in DNS, and creates an SPF record whitelisting the server to send email. This role only runs if the `public_mail_server` variable evaluates to `true`. 
+For Amazon servers running a mail server, the `update_dns` tasks create a DKIM record in DNS, and create an SPF record whitelisting the server to send email. These tasks runs only if the `is_ec2_environment` variable evaluates to `true`. 
 
 For security reasons, the portions of this role that update Amazon Web Services do not execute on the remote host; these steps use the `local_action` idiom to execute on the Ansible controller workstation. The role:
 
@@ -340,6 +340,93 @@ Configure the OS X SSH login agent to require a password upon first use of an SS
           AddKeysToAgent yes
           UseKeychain yes
           IdentityFile ~/.ssh/id_rsa
+
+## Terraform
+
+HashiCorp's [Terraform](https://www.terraform.io) provides initial bootstrapping of the Amazon environment.
+
+Running:
+
+        terraform import aws_key_pair.production "Andy SSH"
+        terraform import aws_eip.server "3.212.5.14"
+        terraform import aws_security_group.server sg-0b9a95f517c1bd95e
+        terraform import aws_instance.server i-0fa929b24c8c41d9e
+        terraform import aws_route53_record.server Z1805OH6BSLQM8_staging.markerbench.com_A
+        terraform plan
+
+## Linux distro comparison
+
+Alpine 3.10 - 98M, 641M, post config before containers, 1.36GB after
+  Ports 22, 323
+Minimal Ubuntu 19.04 - Disco - 737MB
+  Ports 22, 53, 53u, 68u
+CentOS 7 (x86_64) - with Updates HVM - 885MB
+  Ports 22, 111, 25, 68u, 111u, 323u, 973u
+  
+### Checking dependencies on Ubuntu
+
+apt-cache rdepends --no-recommends --no-enhances --installed pollinate
+
+Can kill:
+pollinate -- seed the pseudo random number generator
+at -- Delayed job execution and batch processing
+bc -- GNU bc arbitrary precision calculator language
+cryptsetup-bin
+cryptsetup-run -- disk encryption support - startup scripts
+dash
+diffutils
+
+Can keep:
+apparmor
+
+## AWS Log Agent on Alpine
+
+APK packages required: py3-virtualenv
+Python packages required: awscli
+
+https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py
+
+Copy to ~vagrant. As root:
+python3 ~vagrant/awslogs-agent-setup.py --region us-east-1
+
+Program setup tracing:
+main()
+setup_artifacts()
+  install_system_dependencies()
+    install_pip()
+      install()
+    install_ubuntu_dependencies()    
+  install_awslogs_cli()
+    do_pip_install() virtualenv
+    create virtualenv
+
+## AWS CloudWatch IAM policy, role and user
+
+As described in the [CloudWatch Quick Start guide](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/QuickStartEC2Instance.html), in the AWS console, manually create a Role called `CloudWatchPush` with the following JSON permissions:
+
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "logs:CreateLogGroup",
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "logs:DescribeLogStreams"
+                    ],
+                    "Resource": [
+                        "arn:aws:logs:*:*:*"
+                    ]
+                }
+            ]
+        }
+
+Create role `CloudWatchAgent` and attach the policy `CloudWatchPush`. Add `EC2` as the trusted entity.
+
+Create user `TestCloudWatchAgent` with "programmatic" access type. Directly attach the policy `CloudWatchPush`. Extract the access key and secret access key.
+
+kill -SIGINT (agent process)
 
 # Runtime Operations and Troubleshooting
 

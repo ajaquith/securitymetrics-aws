@@ -40,7 +40,7 @@
     - rsyslog
   notify: Restart rsyslog
 
-- name: Install and configure mDNS responder (dev hosts only)
+- name: Install and configure mDNS responder (.local hosts only)
   block:
     - name: Install mDNS packages
       apk:
@@ -57,7 +57,7 @@
         name: avahi-daemon
         state: started
         enabled: yes
-  when: "'dev' in group_names"
+  when: "server_name is regex('\\.local$')"
 
 - name: Enable swap memory limits
   ini_file:

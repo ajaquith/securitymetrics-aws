@@ -1,4 +1,3 @@
-
 #!/bin/bash
 #
 # Removes any PasswordAuthentication lines from SSHD config, and disables password auth

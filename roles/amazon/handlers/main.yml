@@ -1,0 +1,4 @@
+- name: Restart awslogs
+  service:
+    name: awslogs
+    state: restarted

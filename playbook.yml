@@ -10,10 +10,16 @@
       changed_when: output.stdout != ""
     - name: Gather facts
       setup:
+    - set_fact:
+        is_ec2_environment: "{{ 'amazon' in ansible_bios_version }}"
 
   tasks:
     - import_role:
         name: base
+    - include_role:
+        name: amazon
+        tasks_from: cloudwatch-logs
+      when: is_ec2_environment == true
     - import_role:
         name: docker
     - import_role:
@@ -25,7 +31,7 @@
         tasks_from: update_dns
         apply:
           become: no
-      when: public_mail_server == true
+      when: is_ec2_environment == true
     - import_role:
         name: import_archive
       when: import_archive == true

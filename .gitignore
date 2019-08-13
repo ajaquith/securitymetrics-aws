@@ -1,8 +1,9 @@
 .DS_Store
+.terraform/
 .vagrant/
 playbook.retry
 temp/
 *.pyc
 **/__pycache__/
-etc/config.pck
-etc/discuss.mbox
+etc/local/
+terraform.tfstate*

@@ -2,4 +2,3 @@ server_domain: devbox.local                              # Domain of mailman, we
 server_name: devbox.local                                # Fully qualified name of the webserver (eg 'testbox.local')
 import_archive: false
 letsencrypt_certificates: false
-public_mail_server: false

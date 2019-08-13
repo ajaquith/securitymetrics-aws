@@ -1,0 +1,49 @@
+#!/sbin/openrc-run
+#
+# AWS Log Agent service script for Alpine Linux
+#
+# Version: 1.4.3
+#
+# See https://wiki.alpinelinux.org/wiki/Writing_Init_Scripts
+# See https://github.com/OpenRC/openrc/blob/master/service-script-guide.md
+# See https://github.com/OpenRC/openrc/blob/master/supervise-daemon-guide.md
+#
+command="/usr/bin/aws"
+command_args="logs push --config-file {{ aws_logs_home }}/etc/awslogs.conf"
+command_background=true
+start_stop_daemon_args="-1 /var/log/awslogs.log -2 /var/log/awslogs.log"
+pidfile="{{ aws_logs_home }}/state/awslogs.pid"
+supervisor=supervise-daemon
+healthcheck_delay=30
+
+depend() {
+  need networking
+  use network-online
+  provide awslogs
+}
+
+start_post() {
+    (
+        flock -x 9
+        RETVAL=$?
+        touch {{ aws_logs_home }}/state/awslogs.lock
+    ) 9>{{ aws_logs_home }}/state/awslogs.mutex
+    rm -f {{ aws_logs_home }}/state/awslogs.mutex
+}
+
+stop_post () {
+    (
+        flock -x 9
+        rm -f {{ aws_logs_home }}/state/awslogs.lock
+    ) 9>{{ aws_logs_home }}/state/awslogs.mutex
+    rm -f {{ aws_logs_home }}/state/awslogs.mutex
+}
+
+healthcheck() {
+    if [ -f {{ aws_logs_home }}/state/awslogs.pid ]
+    then
+        return 0
+    else
+        return 1
+    fi
+}
