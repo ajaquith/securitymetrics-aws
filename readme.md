@@ -362,43 +362,23 @@ Minimal Ubuntu 19.04 - Disco - 737MB
   Ports 22, 53, 53u, 68u
 CentOS 7 (x86_64) - with Updates HVM - 885MB
   Ports 22, 111, 25, 68u, 111u, 323u, 973u
-  
-### Checking dependencies on Ubuntu
 
-apt-cache rdepends --no-recommends --no-enhances --installed pollinate
+## AWS Elastic File Service
 
-Can kill:
-pollinate -- seed the pseudo random number generator
-at -- Delayed job execution and batch processing
-bc -- GNU bc arbitrary precision calculator language
-cryptsetup-bin
-cryptsetup-run -- disk encryption support - startup scripts
-dash
-diffutils
+Assume we have provisioned an EFS instance. Its file system id is `fs-29b863cb` or similar. The EFS instance needs to be added to a security group that allows NFS inbound traffic from all VPC addresses (this could be narrowed later). Example security group: type `NFS` (port range 2049), type `TCP`, source `172.31.16.0/20`.
 
-Can keep:
-apparmor
+Mount EFS using `stunnel` SSL encryption by creating a mount point eg `/root/efs` and then mounting the filesystem ID:
 
-## AWS Log Agent on Alpine
+        mount -t efs -o tls fs-29b863cb:/ /root/efs
+
+Logs are in `/var/log/amazon/efs`. The mount log is `mount.log`. Watchdog is `mount-watchdog.log`.
+
+## AWS CloudWatch Log Agent on Alpine
 
 APK packages required: py3-virtualenv
 Python packages required: awscli
 
 https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py
-
-Copy to ~vagrant. As root:
-python3 ~vagrant/awslogs-agent-setup.py --region us-east-1
-
-Program setup tracing:
-main()
-setup_artifacts()
-  install_system_dependencies()
-    install_pip()
-      install()
-    install_ubuntu_dependencies()    
-  install_awslogs_cli()
-    do_pip_install() virtualenv
-    create virtualenv
 
 ## AWS CloudWatch IAM policy, role and user
 

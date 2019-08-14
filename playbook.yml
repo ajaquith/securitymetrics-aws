@@ -15,6 +15,9 @@
 
   tasks:
     - import_role:
+        name: amazon
+        tasks_from: efs-utils.yml
+    - import_role:
         name: base
     - include_role:
         name: amazon
@@ -26,11 +29,9 @@
         name: keys
     - import_role:
         name: mailman
-    - include_role:
+    - import_role:
         name: amazon
         tasks_from: update_dns
-        apply:
-          become: no
       when: is_ec2_environment == true
     - import_role:
         name: import_archive

@@ -1,4 +1,9 @@
-- name: Restart awslogs
+- name: Restart AWS EFS watchdog
+  service:
+    name: awsefs
+    state: restarted
+
+- name: Restart AWS CloudWatch log daemon
   service:
     name: awslogs
     state: restarted

@@ -16,6 +16,7 @@
     value: "10 {{ server_name }}."
     overwrite: yes
     wait: yes
+  become: no
 
 - name: "Register SPF record for {{ server_domain }}"
   local_action:
@@ -30,6 +31,7 @@
     value: '"v=spf1 mx -all"'
     overwrite: yes
     wait: yes
+  become: no
 
 - name: "Register DKIM record"
   local_action:
@@ -44,3 +46,4 @@
     value: "{{ dkim_public_key.stdout | dkim_record }}"
     overwrite: yes
     wait: yes
+  become: no

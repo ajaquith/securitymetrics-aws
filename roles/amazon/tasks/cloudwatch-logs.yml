@@ -25,21 +25,21 @@
   with_items:
     - logs/aws.conf
     - logs/awslogs.conf
-  notify: Restart awslogs
+  notify: Restart AWS CloudWatch log daemon
     
 - name: Create AWS Log Agent daemon
   template:
     src: logs/awslogs.initd
     dest: /etc/init.d/awslogs
     mode: "u=rwx,g=rx,o=rx"
-  notify: Restart awslogs
+  notify: Restart AWS CloudWatch log daemon
 
 - name: Create AWS Log Agent daemon configuration
   template:
     src: logs/awslogs.confd
     dest: /etc/conf.d/awslogs
     mode: "u=rw,g=r,o=r"
-  notify: Restart awslogs
+  notify: Restart AWS CloudWatch log daemon
 
 - name: Create AWS Log Agent log rotatation script
   template:
