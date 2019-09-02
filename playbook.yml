@@ -15,9 +15,6 @@
 
   tasks:
     - import_role:
-        name: amazon
-        tasks_from: efs-utils.yml
-    - import_role:
         name: base
     - include_role:
         name: amazon

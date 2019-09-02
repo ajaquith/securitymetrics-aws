@@ -1,63 +1,10 @@
-- name: Install AWS Python packages
-  pip:
-    name: ['awscli', 'awscli-cwlogs']
-
-- name: Create AWS Log Agent directories
-  file:
-    path: "{{ item }}/"
-    state: directory
-  with_items:
-    - "{{ aws_logs_home }}/bin"
-    - "{{ aws_logs_home }}/etc"
-    - "{{ aws_logs_home }}/state"
- 
-- name: Create AWS Log Agent version script
-  template:
-    src: logs/awslogs-version.sh
-    dest: "{{ aws_logs_home }}/bin/"
-    mode: "u=rwx,g=rx,o=rx"
-
-- name: Create AWS Log Agent configuration files
-  template:
-    src: "{{ item }}"
-    dest: "{{ aws_logs_home }}/etc/"
-    mode: "u=rw,g=,o="
-  with_items:
-    - logs/aws.conf
-    - logs/awslogs.conf
-  notify: Restart AWS CloudWatch log daemon
-    
-- name: Create AWS Log Agent daemon
-  template:
-    src: logs/awslogs.initd
-    dest: /etc/init.d/awslogs
-    mode: "u=rwx,g=rx,o=rx"
-  notify: Restart AWS CloudWatch log daemon
-
-- name: Create AWS Log Agent daemon configuration
-  template:
-    src: logs/awslogs.confd
-    dest: /etc/conf.d/awslogs
-    mode: "u=rw,g=r,o=r"
-  notify: Restart AWS CloudWatch log daemon
-
-- name: Create AWS Log Agent log rotatation script
-  template:
-    src: logs/awslogs.logrotate
-    dest: /etc/logrotate.d/awslogs
-    mode: "u=rw,g=r,o=r"
-
-- name: Schedule AWS Log Agent log rotation
-  cron:
-    minute: "30"
-    name: "AWS Log Agent log rotation script"
-    job:  "logrotate -s /var/log/logstatus /etc/logrotate.d/awslogs"
+- name: Install AWS Log Agent
+  apk:
+    name: ['awslogs-agent@arj']
+    state: present
 
 - name: Enable AWS Log Agent service
   service:
     name: awslogs
     state: started
     enabled: yes
-
-- name: Force any notified handlers to run now
-  meta: flush_handlers
