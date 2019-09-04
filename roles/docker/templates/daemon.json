@@ -1,5 +1,4 @@
 {
-        "data-root": "/opt/docker",
         "icc": false,
         "live-restore": true,
         "log-driver": "json-file",
