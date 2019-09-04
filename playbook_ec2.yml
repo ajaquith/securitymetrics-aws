@@ -1,0 +1,29 @@
+#
+# Simple playbook for Amazon Web Services EC2 hosts
+#
+# Inventory of the hosts to operate on are configured in hosts_aws_ec2.yml.
+# The basic stratgy of the inventory file is to use the AWS tag 'Environment'
+# to determine the group the EC2 host belongs to.
+#
+# When run inside Terraform:
+#
+# ansible-playbook -i hosts_aws_ec2.yml \
+#     --extra-vars "ec2_environment=tf" \
+#     --user alpine \
+#     --private-key ~/.ssh/id_rsa \
+#     --ssh-extra-args='-o StrictHostKeyChecking=no' \
+#     playbook_ec2.yml
+#
+# When run from the command line:
+# 
+# ansible-playbook -i hosts_aws_ec2.yml --extra-vars "ec2_environment='tf'" \
+# --user alpine --private-key ~/.ssh/id_rsa playbook_ec2.yml
+#
+- hosts:  "{{ ec2_environment }}"
+  become: yes
+  gather_facts: yes
+  no_log: no
+
+  tasks:
+    - debug:
+        msg: "This is a test"

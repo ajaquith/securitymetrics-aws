@@ -3,16 +3,6 @@
     name: avahi-daemon
     state: restarted
 
-- name: Restart ntp
-  service:
-    name: chronyd
-    state: restarted
-
-- name: Restart rsyslog
-  service:
-    name: rsyslog
-    state: restarted
-
 - name: Restart sshd
   service:
     name: sshd

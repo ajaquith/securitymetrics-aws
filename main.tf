@@ -1,30 +1,3 @@
-#
-# Terraform configuration for securitymetrics.org
-# Author:  Andrew R Jaquith
-# Version: 0.1
-#
-
-# ========== VARIABLES =========================================================
-
-## --------- Defaults ----------------------------------------------------------
-
-variable "aws_vpc_id"        { default = "vpc-e9fad58d" }
-variable "aws_vpc_subnet_id" { default = "subnet-d5e34a8d" }
-variable "ec2_ssh_key_name"  { default = "Andy SSH" }
-variable "ec2_ssh_key"       { default = "~/.ssh/id_rsa.pub" }
-variable "ec2_instance_type" { default = "t2.nano" }
-variable "ec2_iam_role"      { default = "AlpineContainer" }
-variable "all_ipv4"          { default = "0.0.0.0/0" }
-
-## --------- User-defined (in .tfvars files) -----------------------------------
-
-variable "ec2_environment"   { description = "Name of the AWS environment" }
-variable "ec2_region"        { description = "Region to deploy AWS environment" }
-variable "ec2_instance_ami"  { description = "ID of the AMI used for EC2 instances" }
-variable "server_domain"     { description = "Domain of the server, eg securitymetrics.org" }
-variable "server_name"       { description = "FQDN of the server eg staging.markerbench.com" }
-
-
 # ========== PROVIDERS =========================================================
 
 provider "aws" { 
@@ -121,7 +94,6 @@ resource "aws_security_group" "ssh" {
     cidr_blocks    = [var.all_ipv4]
   }
   tags = {
-    Name           = var.server_name
     Environment    = var.ec2_environment
   }
 }
@@ -145,7 +117,6 @@ resource "aws_security_group" "smtp" {
     cidr_blocks    = [var.all_ipv4]
   }
   tags = {
-    Name           = var.server_name
     Environment    = var.ec2_environment
   }
 }
@@ -176,7 +147,6 @@ resource "aws_security_group" "https" {
     cidr_blocks    = [var.all_ipv4]
   }
   tags = {
-    Name           = var.server_name
     Environment    = var.ec2_environment
   }
 }
@@ -187,8 +157,7 @@ resource "aws_instance" "server" {
   ami              = var.ec2_instance_ami
   instance_type    = var.ec2_instance_type
   iam_instance_profile = var.ec2_iam_role
-  user_data        = file("roles/amazon/files/ec2_init.sh")
-  security_groups  = [aws_security_group.ssh.id,
+  vpc_security_group_ids = [aws_security_group.ssh.id,
                       aws_security_group.smtp.id,
                       aws_security_group.https.id]
   monitoring       = true
@@ -202,6 +171,19 @@ resource "aws_instance" "server" {
     Name           = var.server_name
     Environment    = var.ec2_environment
   }
+  provisioner "local-exec" {
+    command        = <<-EOT
+        wait 30; \
+        ansible-playbook \
+            -vvv \
+            -i ${var.ansible_inventory} \
+            --extra-vars 'ec2_environment=${var.ec2_environment}' \
+            --user ${var.ansible_user} \
+            --private-key ${var.ec2_ssh_key} \
+            --ssh-extra-args='-o StrictHostKeyChecking=no' \
+            ${var.ansible_playbook}
+        EOT
+  }
 }
 
 resource "aws_route53_record" "server" {
@@ -209,29 +191,6 @@ resource "aws_route53_record" "server" {
   name             = var.server_name
   type             = "A"
   ttl              = "300"
-  records          = [aws_instance.server.public_ip]
+  records          = [aws_eip.server.public_ip]
   allow_overwrite  = true
-}
-
-
-# ========== OUTPUT VARIABLES ==================================================
-
-output "server_name" {
-  description      = "Server name" 
-  value            = aws_instance.server.public_dns
-}
-
-output "ec2_instance_id" {
-  description      = "Instance ID"
-  value            = aws_instance.server.id
-}
-
-output "ec2_elastic_ip" {
-  description      = "Elastic IP"
-  value            = aws_instance.server.public_ip
-}
-
-output "efs_id" {
-  description      = "Elastic File Service ID"
-  value            = aws_efs_file_system.nfs.id
 }

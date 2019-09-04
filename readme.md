@@ -8,13 +8,13 @@ The securitymetrics.org infrastructure contains three components:
 
 - The mail.securitymetrics.org server hosts the Mailman 3 listserv. It runs on the same server as the archive, on an Amazon VPC.
 
-The hosts are built and configured using Ansible. All Amazon-related tasks are contained in the `amazon` role.
+Three tools work in tandem to build the environment. Packer builds the host images. Terraform creates the networking, storage, and host infrastructure from a templated 'blueprint.' Ansible configures hosts after they are created.
 
 _Note: the AWS instance of the securitymetrics archive is pre-production. A current "staging" version is running in [my personal blog domain](http://staging.markerbench.com). It is not guaranteed to be stable._
 
-# Provisioning
+# Host creation
 
-Hosts are provisioned in two ways depending on whether the host is used for development or production. Vagrant provisions dev machines, and Ansible provisions production.
+Hosts are created in two ways depending on whether the host is used for development or production. Vagrant creates dev machines; Terraform creates production.
 
 ## Developer host
 
@@ -22,35 +22,39 @@ Vagrant provisions a local virtual machine running on the developer machine. The
 
 After initial provisioning is done, Vagrant runs the Ansible playbook `playbook.yml` to configure the host (see the [Configuration](#Configuration) section below).
 
-## Staging host
+## Production environments
 
-The Ansible script `provision-ec2.yml` provisions an EC2 node in Amazon Web Services. The [Alpine Amazon Machine Image (AMI)](https://github.com/mcrute/alpine-ec2-ami/blob/master/releases/README.md) is a current version of Alpine Linux. Exactly one machine for each fully-qualified domain name is created. The AWS Virtual Private cloud the node is placed into is configurable and is assumed to already exist; the VPC is _not_ provisioned by Ansible. An Elastic IP is created if necessary and assigned to the node, and a matching DNS A record is placed into the securitymetrics.org zone managed by AWS Route 53.
+The Terraform configuration file `securitymetrics.tf` describes how to create production environments in Amazon Web Services. The Terraform execution plan will create a designated environment it does not already exist.
 
-In order to provision in AWS, The `provision-ec2.yml` playbook uses the `local` connection type on `localhost`. The playbook itself is very thin; its only function is to execute the role `amazon`. Before this role runs, the playbook loads AWS parameters from `host_vars/staging.yml`. These parameters include the AWS access key, secret key, VPC ID and VPC subnet ID, Amazon Machine Image (AMI) ID, instance type (`t2.small`, etc), path to the SSH key used to access the host, and minimum disk space needed on the node. The access key and secret key and decrypted at runtime using Ansible Vault.
+The [Alpine Amazon Machine Images (AMIs)](https://github.com/ajaquith/alpine-ec2-ami) used for EC2 nodes are based on a current version of Alpine Linux. Exactly one machine for each fully-qualified domain name is created. The AWS Virtual Private cloud the node is placed into is configurable and is assumed to already exist; the VPC is _not_ provisioned by Terraform. An Elastic IP is created if necessary and assigned to Internet-facing nodes, and matching DNS A records are placed into the top-level DNS zone (_eg,_ securitymetrics.org) managed by AWS Route 53.
 
-The playbook ensures that exactly one EC2 host with the name `server_name` and environment `ec2_environment` is created, along with an associated security group, Elastic IP and DNS record. The AWS `Name` and `Environment` tags uniquely identify the single instance of EC2 node, security group, Elastic IP address, DNS A record and DNS MX record.
+The Terraform plan ensures that exactly one EC2 host with the name `server_name` and environment `ec2_environment` is created, along with an associated security group, Elastic IP and DNS record. The AWS `Name` and `Environment` tags uniquely identify the single instance of EC2 node, security group, Elastic IP address, DNS A record and DNS MX record. It is executed in the project root directory, with the environment variables passed as a parameter:
 
-The playbook includes a single role `amazon`. This role runs the tasks in the `roles/amazon/tasks.main.yml` file, and:
+        terraform apply -var-file=_environment_.tfvars
+
+...where the `.tfvars` files supply variables specific to each environment.
+
+The Terraform plan:
 
 1. Uploads the SSH key `ec2_ssh_key` to EC2. These keys reside outside the project, in the developer's home directory.
 
-2. Looks up all EC2 nodes and EC2 Elastic IPs whose `Name` and `Environment` tags values equal the hostname `server_name` and environment `ec2_environment` (the default is "testing").
+2. Creates an Elastic File System (EFS) and mount-point, in the subnet `aws_vpc_subnet_id`, using the creation token _`environment`_`-nfs` to ensure only one is created. It attaches an AWS security group named _`environment`_`-nfs` that allows inbound NFS traffic (port 2049) from any IP address in the private VPC subnet, and allows all outbound traffic to any IP address in the private VPC subnet. The EFS resource and secuity group are both tagged with the Name _`environment`_`-nfs` and Environment _`environment`_.
 
-3. Creates an EC2 security group named `server_name` in the VPC `aws_vpc_id`, if it does not already exist. The security group opens ports 22 (SSH), 587 (SMTP), 80 (HTTP), and 443 (HTTPS); any source IP address may connect. It also sets the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively.
+3. Creates an AWS security group, in the subnet `aws_vpc_subnet_id`, for each port opened to the Internet: 22 (SSH), 25 (SMTP), and 80/443 (HTTP/HTTPS). The groups are named _`environment`_`-ssh`, _`environment`_`-smtp`, and _`environment`_`-https` respectively. HTTP and HTTPS are combined in the same security group. Each security group allows traffic to or from any IP address. Each group is tagged with Environment _`environment`_.
 
-4. Creates an EC2 node named `server_name` in the VPC subnet `aws_vpc_subnet_id`, using the AMI `ec2_instance_ami` as the source. This AMI is a [current version of Alpine Linux](https://github.com/mcrute/alpine-ec2-ami/blob/master/releases/README.md). The playbook does _not_ assign a public IP address, but enables monitoring, and sets the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively.
+4. Creates an EC2 node named `server_name`, in the VPC subnet `aws_vpc_subnet_id`, using the AMI `ec2_instance_ami` as the source. This AMI is a [current version of Alpine Linux](https://github.com/ajaquith/alpine-ec2-ami). The playbook does _not_ assign a public IP address, but enables monitoring, and sets the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively. It assigns the IAM instance profile role `ec2_iam_role`.
 
-5. Creates an EC2 Elastic IP, if it does not already exist.
+5. Creates an EC2 Elastic IP, if it does not already exist, setting the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively.
 
-6. Looks up the EC2 node's root volume ID, device type and size, setting the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively.
+6. Associates the EC2 Elastic IP with the EC2 node.
 
-7. Associates the EC2 Elastic IP with the EC2 node.
+7. Registers a DNS `A` record with Amazon Route 53 in the `server_domain` hosted DNS zone, with the record's name set to `server_name` and the value set to the Elastic IP address.
 
-8. Registers a DNS `A` record with Amazon Route 53 in the `server_domain` hosted DNS zone, with the record's name set to `server_name` and the value set to the Elastic IP address.
+After Terraform creates the EC2 node, the Ansible playbook `playbook_ec2.yml` configures it (see the next section). Integration with Ansible is achieved as follows. The Terraform configuration declares a `local-exec` provisioner that runs the `ansible-playbook` command to execute a playbook (default: `playbook_ec2.yml`).
 
-9. Resizes the EC2's boot volume to `ec2_volume_size_target` (default: 5 GB), if the current size is smaller. The playbook does this by detaching the boot volume and taking a temporary snapshot of it; creating a new volume in the correct size using the snapshot as its source; attaching the new volume in place of the old one; and then, booting the EC2 node. It deletes the temporary snapshot and old volume once these tasks have completed.
+As part of the command options, Terraforms specifies a dynamic inventory file (default: `hosts_ec2.yml`) that retrieves metadata about all EC2 instances from AWS, using the AWS `Environment` tag to group hosts. For example, if an EC2 instance has the Environment tag `staging`, it is grouped in Ansible into the `staging` group.
 
-After initial provisioning in Amazon is completed, the host may be configured with the main playbook (see the next section).
+To narrow down the instances to configure, the variable `ec2_environment` is passed from Terraform to indicate the environment that contains the EC2 instances. When the Ansible playbook runs, its `hosts` scope is constrained to the `ec2_environment` group.
 
 ## Production host
 
@@ -58,7 +62,7 @@ The production site is not running yet.
 
 # Configuration
 
-The Ansible playbook `playbook.yml` configures the test, dev and prod production machines in three steps. The playbook:
+The Ansible playbook `playbook_ec2.yml` configures the test, dev and prod production machines in three steps. The playbook:
 
 1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual. If the string `amazon` is found in the Ansible host fact `ansible_bios_version`, the variable `is_ec2_environment` is set to `true` so that other tasks can use it.
 
@@ -70,27 +74,21 @@ All roles execute on target hosts with elevated (root) privileges. We use the st
 
 ## The `base` role
 
-The `base` role installs all of the essential services needed for a basic machine, other its core applications. Essential services include logging, job scheduling (`cron`), network time protocol (NTP), and remote login (SSH). For hosts with names ending in `.local`, the `base` role also installs multicast DNS so that it can be easily discovered and connected to on the local network. Specifically, the role:
+The `base` role installs all of the essential services needed for a basic machine, other than its core applications. Essential services include logging, job scheduling (`cron`), network time protocol (NTP), and remote login (SSH). For hosts with names ending in `.local`, the `base` role also installs multicast DNS so that it can be easily discovered and connected to on the local network. Specifically, the role:
 
-1. Using `apk`, installs the `audit`, `chrony` (NTP), `curl`, `git`, `net-tools` (`netstat` etc), `rsyslog` (logging) and `tzdata` packages.
+1. Using `apk`, verifies the presence of the the `busybox-initscripts`, `audit`, `curl`, `git`, `net-tools`, and `logrotate` packages, installing them if they do not exist. The BusyBox init scripts include standard services for and `cron`, `syslog`, NTP.
 
-2. Stops the default logging service, which is Alpine's Busybox `syslog` service.
+2. Configures SSH by copying a templated `sshd_config` to `/etc/ssh`. This version is identical to the stock version but disables remote `root` login password-based authentication.
 
-3. Configures SSH by copying a templated `sshd_config` to `/etc/ssh`. This version is identical to the stock version but disables remote `root` login password-based authentication.
+3. Enables the NTP, cron and syslog services (`chronyd`, `crond` and `syslog`), requiring them to start at bootup. _Note:_ the Amazon Machine Image configures the NTP daemon to use Amazon's NTP services; the Ansible playbook does not attempt to verify this setting (although it may in the future).
 
-4. Configures NTP by copying `chrony.conf` to `/etc/chrony`. The TCP listening port is disabled.
+4. For hosts with nanes ending in `.local`, configures the Avahi multicast DNS responder (mDNS) so that local VMs can be connected or browsed to by their local host names, for example (`devbox.local`).  The templated `avahi-daemon.conf` is copied to `/etc/avahi`.
 
-5. Configures `rsyslog` by copying a templated `rsyslog.conf` to `/etc`. This version is identical to the stock version but disables network listeners so that it only logs locally.
+5. Configures the host's kernel to use swap-memory limits, an important feature for Docker. As described in the [Alpine wiki](https://wiki.alpinelinux.org/wiki/Docker), the playbook adds the `cgroup_enable=memory swapaccount=1` to the `extlinux` configuration (`/etc/update-extlinux.conf`), and notifies Ansible to reboot the host if the values changed.
 
-6. Enables the NTP and syslog services (`chronyd` and `rsyslog`) and requires them to start at bootup.
+6. Sets the hostname to `server_name`.
 
-7. For hosts with nanes ending in `.local`, configures the Avahi multicast DNS responder (mDNS) so that local VMs can be connected or browsed to by their local host names, for example (`devbox.local`).  The templated `avahi-daemon.conf` is copied to `/etc/avahi`.
-
-8. Configures the host's kernel to use swap-memory limits, an important feature for Docker. As described in the [Alpine wiki](https://wiki.alpinelinux.org/wiki/Docker), the playbook adds the `cgroup_enable=memory swapaccount=1` to the `extlinux` configuration (`/etc/update-extlinux.conf`), and notifies Ansible to reboot the host if the values changed.
-
-9. Sets the hostname to `server_name`.
-
-10. Flushes any notified handlers, which may cause `sshd`, `avahi-daemon`, `rsyslog` or `ntp` to restart if their configurations change. It may cause the server to reboot if swap memory support is enabled. If the server reboots, Ansible will wait for up to 5 minutes for the host to be up again before proceeding.
+7. Flushes any notified handlers, which may cause `sshd` or `avahi-daemon` to restart if their configurations changed. If swap memory support is newly enabled, the server reboots. If the server reboots, Ansible will wait for up to 5 minutes for the host to be up again before proceeding.
 
 ## The `docker` role
 
@@ -321,7 +319,7 @@ Supply the AWS Access Key ID, AWS Secret Access Key from the `.csv` file. This w
 
 5. Change to the `securitymetrics` project and verify that the Ansible EC2 inventory plugin can read its inventory:
 
-        ansible-inventory -i hosts_aws_ec2.yml --graph
+        ansible-inventory -i hosts_ec2.yml --graph
         
 ...which should produce output similar to this:
 
@@ -331,19 +329,22 @@ Supply the AWS Access Key ID, AWS Secret Access Key from the `.csv` file. This w
           |--@testing:
           |  |--ec2-3-212-5-14.compute-1.amazonaws.com
           |--@ungrouped:
+          
+## Packer
 
-## OS X configuration
+For production, HashiCorp's [Packer]() builds custom Amazon Machine Images (AMIs) with a basic Alpine Linux configuration, including Docker and AWS utilities. In the `ajaquith` GitHub repository, the forked [alpine-ec2-ami](https://github.com/ajaquith/alpine-ec2-ami) repository contains scripts for building the AMIs.
 
-Configure the OS X SSH login agent to require a password upon first use of an SSH key, by editing `~/.ssh/config` so that it uses the SSH keychain, adds SSH keys automatically, and sets the default identity file:
+On OS X, install Packer using `brew`:
 
-        Host *
-          AddKeysToAgent yes
-          UseKeychain yes
-          IdentityFile ~/.ssh/id_rsa
+        brew install packer
+
+See the `alpine-ec2-ami` project's README for more details on how to build the AMIs. But in general: clone the repo; change to the project directory, and build using `make`:
+        
+        make PROFILE=arj
 
 ## Terraform
 
-HashiCorp's [Terraform](https://www.terraform.io) provides initial bootstrapping of the Amazon environment.
+HashiCorp's [Terraform](https://www.terraform.io) bootstraps the Amazon environment.
 
 Running:
 
@@ -353,6 +354,15 @@ Running:
         terraform import aws_instance.server i-0fa929b24c8c41d9e
         terraform import aws_route53_record.server Z1805OH6BSLQM8_staging.markerbench.com_A
         terraform plan
+        
+## OS X configuration
+
+Configure the OS X SSH login agent to require a password upon first use of an SSH key, by editing `~/.ssh/config` so that it uses the SSH keychain, adds SSH keys automatically, and sets the default identity file:
+
+        Host *
+          AddKeysToAgent yes
+          UseKeychain yes
+          IdentityFile ~/.ssh/id_rsa
 
 ## Linux distro comparison
 
