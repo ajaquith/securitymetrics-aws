@@ -1,25 +1,21 @@
 #
-# Simple playbook for Amazon Web Services EC2 hosts
-#
-# Inventory of the hosts to operate on are configured in hosts_aws_ec2.yml.
-# The basic stratgy of the inventory file is to use the AWS tag 'Environment'
-# to determine the group the EC2 host belongs to.
+# Simple playbook for Amazon Web Services EC2 hosts. It detects the current
+# Terraform environment by reading .terraform/environment. Then, it loads
+# default and environment-specific vars from env_vars.
 #
 # When run inside Terraform:
 #
-# ansible-playbook -i hosts_aws_ec2.yml \
-#     --extra-vars "ec2_environment=tf" \
-#     --user alpine \
-#     --private-key ~/.ssh/id_rsa \
-#     --ssh-extra-args='-o StrictHostKeyChecking=no' \
-#     playbook_ec2.yml
+#         ansible-playbook -i hosts_aws_ec2.yml \
+#             --user alpine \
+#             --private-key ~/.ssh/id_rsa \
+#             --ssh-extra-args='-o StrictHostKeyChecking=no' \
+#             playbook_ec2.yml
 #
 # When run from the command line:
 # 
-# ansible-playbook -i hosts_aws_ec2.yml --extra-vars "ec2_environment='tf'" \
-# --user alpine --private-key ~/.ssh/id_rsa playbook_ec2.yml
+#         ansible-playbook playbook_ec2.yml
 #
-- hosts:  "{{ ec2_environment }}"
+- hosts:  "{{ lookup('file', '{{ playbook_dir }}/.terraform/environment') }}"
   become: yes
   gather_facts: yes
   no_log: no
@@ -27,13 +23,18 @@
   pre_tasks:
     - set_fact:
         is_ec2_environment: "{{ 'amazon' in ansible_bios_version }}"
-
-  tasks:
+    - include_vars:
+        file: "env_vars/default/main.yml"
     - block:
-      - ec2_metadata_facts:
-      - set_fact:
-          ec2_region: "{{ ansible_facts.ec2_placement_region }}"
+        - ec2_metadata_facts:
+        - set_fact:
+            ec2_region: "{{ ansible_facts.ec2_placement_region }}"
+            ec2_environment: "{{ lookup('file', '{{ playbook_dir }}/.terraform/environment') }}"
+        - include_vars:
+            file: "env_vars/{{ ec2_environment }}/main.yml"
       when: is_ec2_environment == true
+  
+  tasks:
     - import_role:
         name: base
     - import_role:

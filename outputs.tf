@@ -19,3 +19,8 @@ output "efs_id" {
   description      = "Elastic File Service ID"
   value            = aws_efs_file_system.nfs.id
 }
+
+output "ec2_environment" {
+  description      = "EC2 environment, aka terraform workspace"
+  value            = terraform.workspace
+}

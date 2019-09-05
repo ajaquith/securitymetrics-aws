@@ -8,7 +8,7 @@ The securitymetrics.org infrastructure contains three components:
 
 - The mail.securitymetrics.org server hosts the Mailman 3 listserv. It runs on the same server as the archive, on an Amazon VPC.
 
-Three tools work in tandem to build the environment. Packer builds the host images. Terraform creates the networking, storage, and host infrastructure from a templated 'blueprint.' Ansible configures hosts after they are created.
+Three tools work in tandem to build the environment. Packer builds the host images. Terraform creates the networking, storage, and host infrastructure from a templated 'blueprint.' Ansible configures new hosts after they are created. Terraform and Ansible share a common set of YAML-formatted configuration variables stored in `env_vars/`.
 
 _Note: the AWS instance of the securitymetrics archive is pre-production. A current "staging" version is running in [my personal blog domain](http://staging.markerbench.com). It is not guaranteed to be stable._
 
@@ -24,15 +24,15 @@ After initial provisioning is done, Vagrant runs the Ansible playbook `playbook.
 
 ## Production environments
 
-The Terraform configuration file `securitymetrics.tf` describes how to create production environments in Amazon Web Services. The Terraform execution plan will create a designated environment it does not already exist.
+The Terraform configuration file `main.tf` describes how to create production environments in Amazon Web Services. The Terraform execution plan will create a designated environment it does not already exist.
 
 The [Alpine Amazon Machine Images (AMIs)](https://github.com/ajaquith/alpine-ec2-ami) used for EC2 nodes are based on a current version of Alpine Linux. Exactly one machine for each fully-qualified domain name is created. The AWS Virtual Private cloud the node is placed into is configurable and is assumed to already exist; the VPC is _not_ provisioned by Terraform. An Elastic IP is created if necessary and assigned to Internet-facing nodes, and matching DNS A records are placed into the top-level DNS zone (_eg,_ securitymetrics.org) managed by AWS Route 53.
 
-The Terraform plan ensures that exactly one EC2 host with the name `server_name` and environment `ec2_environment` is created, along with an associated security group, Elastic IP and DNS record. The AWS `Name` and `Environment` tags uniquely identify the single instance of EC2 node, security group, Elastic IP address, DNS A record and DNS MX record. It is executed in the project root directory, with the environment variables passed as a parameter:
+The Terraform plan ensures that exactly one EC2 host with the name `server_name` in a given environment is created, along with an associated security group, Elastic IP and DNS record. The AWS `Name` and `Environment` tags uniquely identify the single instance of EC2 node, security group, Elastic IP address, DNS A record and DNS MX record. It is executed in the project root directory, with the environment variables passed as a parameter:
 
-        terraform apply -var-file=_environment_.tfvars
+        terraform apply
 
-...where the `.tfvars` files supply variables specific to each environment.
+...where the current Terraform workspace furnishes the name of the environment. If the current environment is called `tf`, for example, the Environment tag for all resources will also be `tf`. The YAML file `env_vars/`_`environment`_`main.yml` contains environment-specific settings such as server and domain names. The YAML file `env_vars/default/main.yml` contains default settings.
 
 The Terraform plan:
 
@@ -52,9 +52,9 @@ The Terraform plan:
 
 After Terraform creates the EC2 node, the Ansible playbook `playbook_ec2.yml` configures it (see the next section). Integration with Ansible is achieved as follows. The Terraform configuration declares a `local-exec` provisioner that runs the `ansible-playbook` command to execute a playbook (default: `playbook_ec2.yml`).
 
-As part of the command options, Terraforms specifies a dynamic inventory file (default: `hosts_ec2.yml`) that retrieves metadata about all EC2 instances from AWS, using the AWS `Environment` tag to group hosts. For example, if an EC2 instance has the Environment tag `staging`, it is grouped in Ansible into the `staging` group.
+As part of the command options, Terraform specifies a dynamic inventory file (default: `hosts_ec2.yml`) that retrieves metadata about all EC2 instances from AWS, using the AWS `Environment` tag to group hosts. For example, if an EC2 instance has the Environment tag `staging`, it is grouped in Ansible into the `staging` group.
 
-To narrow down the instances to configure, the variable `ec2_environment` is passed from Terraform to indicate the environment that contains the EC2 instances. When the Ansible playbook runs, its `hosts` scope is constrained to the `ec2_environment` group.
+To narrow down the instances to configure, Ansible reads the contents of `.terraform/environment` to determine the current environment in use; it will configure only EC2 instances from this environment.
 
 ## Production host
 
@@ -346,15 +346,26 @@ See the `alpine-ec2-ami` project's README for more details on how to build the A
 
 HashiCorp's [Terraform](https://www.terraform.io) bootstraps the Amazon environment.
 
-Running:
+Enable remote state storage in AWS S3 by creating a new S3 bucket `cloudadmin.markerbench.com`, with no versioning, access logging, request metrics, or object-level logging. Enable AES-256 default encryption. Disable all public access by default.
 
-        terraform import aws_key_pair.production "Andy SSH"
-        terraform import aws_eip.server "3.212.5.14"
-        terraform import aws_security_group.server sg-0b9a95f517c1bd95e
-        terraform import aws_instance.server i-0fa929b24c8c41d9e
-        terraform import aws_route53_record.server Z1805OH6BSLQM8_staging.markerbench.com_A
-        terraform plan
-        
+Create a custom AWS policy called `TerraformStateManagement` with the following privileges:
+
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "s3:ListBucket",
+              "Resource": "arn:aws:s3:::cloudadmin.markerbench.com"
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject"],
+              "Resource": "arn:aws:s3:::cloudadmin.markerbench.com/terraform/\*"
+            }
+          ]
+        }
+
 ## OS X configuration
 
 Configure the OS X SSH login agent to require a password upon first use of an SSH key, by editing `~/.ssh/config` so that it uses the SSH keychain, adds SSH keys automatically, and sets the default identity file:

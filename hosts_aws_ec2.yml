@@ -1,4 +1,8 @@
 # Dynamic Amazon Web Services inventory
+#
+# The basic stratgy of this inventory file is to use the AWS tag 'Environment'
+# to determine the group the EC2 host belongs to.
+#
 plugin: aws_ec2
 boto_profile: default
 keyed_groups:

@@ -1,17 +1,33 @@
 # Running Terraform
 
-Displaying the execution plan:
+Displaying the execution plan based on the current environment (Terraform workspace):
 
-        terraform plan -var-file=tf.tfvars
+        terraform plan
         
-Executing the plan:
+Executing the plan for the current environment:
 
-        terraform apply -var-file=tf.tfvars
+        terraform apply
+        
+Debugging an operation:
+
+        TF_LOG=DEBUG terraform apply
+
+Creating new environment _tf_ (Terraform workspace)/:
+
+        terraform init
+        terraform workspace new tf
+
+Changing to the _tf_ environment:
+
+        terraform workspace select tf
+
+## Remote state persistence
+S3 bucket for state storage is:
+
+        cloudadmin.markerbench.com/env/tf/terraform/terraform.tfstate
 
 # Running Ansible
 
-        ansible-playbook -i hosts_aws_ec2.yml \
-            --extra-vars "ec2_environment='tf'" \
-            --user alpine \
-            --private-key ~/.ssh/id_rsa \
-            playbook_ec2.yml
+Running the provisioning playbook for the current environment, using the default SSH key and remote user as defined in `ansible.cfg`:
+
+        ansible-playbook playbook_ec2.yml
