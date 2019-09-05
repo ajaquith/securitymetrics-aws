@@ -1,8 +1,11 @@
 {
-        "icc": false,
-        "live-restore": true,
-        "log-driver": "json-file",
-        "log-level": "info",
-        "no-new-privileges": true,
-        "userns-remap": "{{ docker_remap_user }}"
+  "log-driver": "awslogs",
+  "log-opts": {
+    "awslogs-region": "{{ ec2_region }}",
+    "awslogs-group": "docker",
+    "awslogs-create-group": "true",
+    "tag": "{{ '{{' }} .Name{{ '}}' }}/{{ '{{' }}.ID{{ '}}' }}"
+  },
+  "log-level": "info",
+  "live-restore": true
 }

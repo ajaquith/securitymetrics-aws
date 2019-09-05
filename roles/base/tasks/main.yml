@@ -37,7 +37,7 @@
         name: avahi-daemon
         state: started
         enabled: yes
-  when: "server_name is regex('\\.local$')"
+  when: "inventory_hostname is regex('\\.local$')"
 
 - name: Enable swap memory limits for Docker
   ini_file:
@@ -46,12 +46,12 @@
     state: present
     no_extra_spaces: yes
     option: default_kernel_opts
-    value: '"console=ttyS0 console=tty0 cgroup_enable=memory swapaccount=1"'
+    value: "console=ttyS0 console=tty0 cgroup_enable=memory swapaccount=1"
   notify: Update extlinux
 
 - name: Set hostname
   hostname:
-    name: "{{ server_name }}"
+    name: "{{ inventory_hostname_short }}"
   notify: Reboot host
 
 - name: Force any notified handlers to run now

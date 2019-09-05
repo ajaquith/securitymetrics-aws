@@ -319,7 +319,7 @@ Supply the AWS Access Key ID, AWS Secret Access Key from the `.csv` file. This w
 
 5. Change to the `securitymetrics` project and verify that the Ansible EC2 inventory plugin can read its inventory:
 
-        ansible-inventory -i hosts_ec2.yml --graph
+        ansible-inventory -i hosts_aws_ec2.yml --graph
         
 ...which should produce output similar to this:
 

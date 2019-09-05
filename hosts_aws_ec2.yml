@@ -1,3 +1,4 @@
+# Dynamic Amazon Web Services inventory
 plugin: aws_ec2
 boto_profile: default
 keyed_groups:

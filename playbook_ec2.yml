@@ -24,6 +24,17 @@
   gather_facts: yes
   no_log: no
 
+  pre_tasks:
+    - set_fact:
+        is_ec2_environment: "{{ 'amazon' in ansible_bios_version }}"
+
   tasks:
-    - debug:
-        msg: "This is a test"
+    - block:
+      - ec2_metadata_facts:
+      - set_fact:
+          ec2_region: "{{ ansible_facts.ec2_placement_region }}"
+      when: is_ec2_environment == true
+    - import_role:
+        name: base
+    - import_role:
+        name: docker
