@@ -1,1 +1,0 @@
-{{ docker_remap_user }}:{{ docker_root_uid }}:65536

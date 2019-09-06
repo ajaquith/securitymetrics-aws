@@ -164,23 +164,23 @@ The `mailman` role is complex. It performs the following tasks:
 
 1. Configures the PostgresQL data directory `postgres_data`, which is bind-mounted into the container `postgres`. The user `dpostgres` (UID 3070), created by the role, owns the directory and can read and write to it. The group `dpostgres` (GID 3070) is assigned to it but has no read or write access. Inside the container, the user appears as `postgres` (UID 70), and the group appears as `postgres` (GID 70).
 
-2. Configures the Mailman Core data directory `mailman_core`, which is bind-mounded into the container `mailman-core`. The user `drun100` (UID 3100), created by the role, owns the directory and can read and write to it. The group `droot` (GID 3000) is assigned to it and has read-only access. Inside the container, the user appears as `mailman` (UID 100), and the group appears as `root` (GID 0). _Note:_ a sub-directory `var/data` has the group ownership `drun101` (in container: `mailman`, GID 101) with read-write access with the set-GID bit set. This allows Mailman to write its Postfix-specific LMTP address-mapping files, and ensure that they are group-owned by `mailman`.
+2. Configures the Mailman Core data directory `mailman_core`, which is bind-mounded into the container `mailman-core`. The user (UID 5100), created by the role, owns the directory and can read and write to it. The root group (GID 5000) is assigned to it and has read-only access. Inside the container, the user appears as `mailman` (UID 100), and the group appears as `root` (GID 0). _Note:_ a sub-directory `var/data` has the group ownership `5101` (in container: `mailman`, GID 101) with read-write access with the set-GID bit set. This allows Mailman to write its Postfix-specific LMTP address-mapping files, and ensure that they are group-owned by `mailman`.
 
 3. Copies a templated Mailman Core supplemental configuration file `mailman-extra.cfg` to `mailman_core`, which is bind-mounted into the `mailman-core` container. Its only function is to set the administrator's email to `mailman_admin_email`.
 
-4. Configures the Mailman Web data directory `mailman_web_data`, which is bind-mounded into the container `mailman-web`. The user `drun100` (UID 3100), created by the role, owns the directory and can read and write to it. The group `drun101` (GID 3101) is assigned to it and has read-only access. Inside the container, the user appears as `mailman` (UID 100), and the group appears as `mailman` (GID 101).
+4. Configures the Mailman Web data directory `mailman_web_data`, which is bind-mounded into the container `mailman-web`. The user (UID 5100), created by the role, owns the directory and can read and write to it. The group (GID 5101) is assigned to it and has read-only access. Inside the container, the user appears as `mailman` (UID 100), and the group appears as `mailman` (GID 101).
 
 5. Copies a templated Mailman Web supplemental configuration file `settings_local.py` to `mailman_web_data`, which is bind-mounted into the `mailman-web` container. Its primary function is to disable the social-networking login functions of Mailman. Social logins are disabled by adding [an `INSTALLED_APPS` section](https://github.com/maxking/docker-mailman/issues/283).
 
-6. Configures the Postfix directories used for Initialization, data storage and logging, are bind-mounted into the container `postfix`. The user `droot` (UID 3000) owns the directories and can read and write to them. The group `droot` (GID 3000) is assigned to them and has read-only access. Inside the container, the user appears as `root` (UID 0), and the group appears as `root` (GID 0).
+6. Configures the Postfix directories used for Initialization, data storage and logging, are bind-mounted into the container `postfix`. The user (UID 5000) owns the directories and can read and write to them. The group (GID 5000) is assigned to them and has read-only access. Inside the container, the user appears as `root` (UID 0), and the group appears as `root` (GID 0).
 
 5. Copies a templated Postfix configuration script `configure_postfix.sh` to the `postfix_init` directory. The `postfix` container runs this script right after initialization. It sets up [Mailman-specific transport maps](https://mailman.readthedocs.io/en/latest/src/mailman/docs/mta.html#postfix), configures TLS support to use the certificates stored in `certificate_data` (bind-mounted as `/etc/tls`), and tightens the configuration to make it slightly harder for spammers. The contents are based on [several](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/security_guide/sect-security_guide-server_security-securing_postfix) articles.
 
-6. Adds the users that the `postfix` and `nginx` containers run as at runtime to the group `certificate_user`. Postfix runs as `drun100`, which appears in-container as `postfix` (UID 100). Nginx runs as `droot`, which appears in-container as `nginx` (UID 0). By adding these users to the group, the containers gain read access to the bind-mounted TLS certificate directory.
+6. Adds the users that the `postfix` and `nginx` containers run as at runtime to the group `certificate_user`. Postfix runs as UID 5100, which appears in-container as `postfix` (UID 100). Nginx runs as UID 5000, which appears in-container as `nginx` (UID 0). By adding these users to the group, the containers gain read access to the bind-mounted TLS certificate directory.
 
-7. Sets the DKIM directory `dkim_data` permissions to the user that the `postfix` container uses for its OpenDKIM daemon. The directory and all files within it are set to be owned by `drun102`, which appears in-container as `opendkim` (UID 102). The group owner is `drun103`, which appears in-container as `opendkim` (GID 103).
+7. Sets the DKIM directory `dkim_data` permissions to the user that the `postfix` container uses for its OpenDKIM daemon. The directory and all files within it are set to be owned by UID 5102, which appears in-container as `opendkim` (UID 102). The group owner is UID 5103, which appears in-container as `opendkim` (GID 103).
 
-8. Creates a minimal Nginx configuration directory `nginx_conf` and copies the files `nginx.conf`, `mime.types`, `uwsgi_params`,  to it. It copies the website configuration file `mailman.conf` to the subdirectory `conf.d`. The owner and group `droot`, which appears in-container as `root` (UID/GID 0) have read-only access to these files.
+8. Creates a minimal Nginx configuration directory `nginx_conf` and copies the files `nginx.conf`, `mime.types`, `uwsgi_params`,  to it. It copies the website configuration file `mailman.conf` to the subdirectory `conf.d`. The owner and group UID/GID 5000, which appears in-container as `root` (UID/GID 0) have read-only access to these files.
 
 9. Using Docker Compose, creates the Docker containers `postgres`, `postfix`, `mailman-core`, `mailman-web` and `nginx`. In general, data, configuration and logging directories are bind-mounted read-write into each container, with "sidecar" containers that supply other services bind-mounted as read-only. The containers are all attached to the private `docker` virtual network on the host, with each with IP addresses in the 172.19.199.0/24 subnet. 
 
@@ -520,48 +520,48 @@ docker run --name nginx \
 
 ## Container bind-mounts and permissions
 
-| Container    | Bind mounts                                       | Permissions (host)       | Permissions (container)     |
-|--------------|---------------------------------------------------|--------------------------|-----------------------------|
-| postgres     | {{ postgres_data }}:/var/lib/postgresql/data      | dpostgres:dpostgres 0700 | postgres[70]:postgres[70]   |
-| mailman-core | {{ mailman_core }}:/opt/mailman                   | drun100:droot 0750       | mailman[100]:root[0]        |
-|              | {{ mailman_core }}/var/data:/opt/mailman/var/data | drun100:drun101 2750     | mailman[100]:users[100]     |
-| postfix      | {{ postfix_data }}:/var/spool/postfix             | droot:droot 0711         | postfix[100]:root[0]        |
-|              | {{ postfix_log }}:/var/log/postfix                | drun100:droot 0711       | postfix[100]:root[0]        |
-|              | {{ certificate_data }}:/etc/tls:ro                | certs:certs 0750         | 1000:1000                   |
-|              | {{ dkim_data }}:/etc/opendkim/keys:ro             | drun102:drun103 750      | opendkim[102]:opendkim[103] |
-|              | {{ mailman_core }}/var/data:/var/data/mailman:ro  | drun100:drun101 2750     | postfix[100]:101            |
-|              | {{ postfix_init }}:/docker-init.db/:ro            | drun100:droot 750        | postfix[100]:root[0]        |
-| mailman-web  | {{ mailman_web_data }}:/opt/mailman-web-data      | drun100:drun101 750      | mailman[100]:mailman[101]   |
-| nginx        | {{ nginx_log }}:/var/log/nginx                    | droot:droot 750      | root[0]:root[0]             |
-|              | {{ acme_challenge_data }}:/var/www/acme:ro        | certs:certs 750     | ?:root[0]                   |
+| Container    | Bind mounts                                       | Permissions (host) | Permissions (container)     |
+|--------------|---------------------------------------------------|--------------------|-----------------------------|
+| postgres     | {{ postgres_data }}:/var/lib/postgresql/data      | 5070:5070 0700     | postgres[70]:postgres[70]   |
+| mailman-core | {{ mailman_core }}:/opt/mailman                   | 5100:5000 0750     | mailman[100]:root[0]        |
+|              | {{ mailman_core }}/var/data:/opt/mailman/var/data | 5100:5101 2750     | mailman[100]:users[100]     |
+| postfix      | {{ postfix_data }}:/var/spool/postfix             | 5000:5000 0711     | postfix[100]:root[0]        |
+|              | {{ postfix_log }}:/var/log/postfix                | 5100:5000 0711     | postfix[100]:root[0]        |
+|              | {{ certificate_data }}:/etc/tls:ro                | certs:certs 0750   | 1000:1000                   |
+|              | {{ dkim_data }}:/etc/opendkim/keys:ro             | 5102:5103 750      | opendkim[102]:opendkim[103] |
+|              | {{ mailman_core }}/var/data:/var/data/mailman:ro  | 5100:5101 2750     | postfix[100]:101            |
+|              | {{ postfix_init }}:/docker-init.db/:ro            | 5100:5000 750      | postfix[100]:root[0]        |
+| mailman-web  | {{ mailman_web_data }}:/opt/mailman-web-data      | 5100:5101 750      | mailman[100]:mailman[101]   |
+| nginx        | {{ nginx_log }}:/var/log/nginx                    | 5000:5000 750      | root[0]:root[0]             |
+|              | {{ acme_challenge_data }}:/var/www/acme:ro        | certs:certs 750    | ?:root[0]                   |
 |              | {{ certificate_data }}:/etc/tls:ro                | certs:certs 750    | ?:?                         |
-|              | {{ mailman_web_data }}:/opt/mailman-web-data:ro   | 3100:3000 750      | nginx[100]:root[0]          |
+|              | {{ mailman_web_data }}:/opt/mailman-web-data:ro   | 5100:5000 750      | nginx[100]:root[0]          |
 |              | {{ nginx_conf }}:/etc/nginx:ro                    | 0:3000 550         | ?:root[0]                   |
 |              | {{ nginx_html }}:/usr/share/nginx/html:ro         | 0:3000 550         | ?:root[0]                   |
 
 ## Container users
 
-| User[uid]       | Used by containers                               |
-|-----------------|--------------------------------------------------|
-| droot[3000]     | nginx                                            |
-| dpostgres[3070] | postgres                                         |
-| drun100[3100]   | mailman-core, mailman-web, postfix               |
-| drun101[3101]   | postfix:vmail]                                   |
-| drun102[3102]   | postfix:opendkim                                 |
-| drun103[3103]   |                                                  |
-| certs[4000]     | (none, but used by ACME)                         |
+| User[uid]   | Used by containers                      |
+|-------------|-----------------------------------------|
+| [5000]      | nginx                                   |
+| [5070]      | postgres                                |
+| [5100]      | mailman-core, mailman-web, postfix      |
+| [5101]      | postfix:vmail]                          |
+| [5102]      | postfix:opendkim                        |
+| [5103]      |                                         |
+| certs[4000] | (none, but used by ACME)                |
 
 ## Container groups
 
-| Group[gid]      | Used by Containers                               |
-|-----------------|--------------------------------------------------|
-| droot[3000]     | mailman-core, nginx, postfix                     |
-| dpostgres[3070] | postgres                                         |
-| drun100[3100]   |                                                  |
-| drun101[3101]   | mailman-web:mailman                              |
-| drun102[3102]   | postfix:postdrop                                 |
-| drun103[3103]   | postfix:opendkim                                 |
-| certs[4000]     | nginx, postfix. Members: droot, drun100, drun102 |
+| Group[gid] | Used by Containers                       |
+|------------|------------------------------------------|
+| [5000]     | mailman-core, nginx, postfix             |
+| [5070]     | postgres                                 |
+| [5100]     |                                          |
+| [5101]     | mailman-web:mailman                      |
+| [5102]     | postfix:postdrop                         |
+| [5103]     | postfix:opendkim                         |
+| [6000]     | nginx, postfix. Members: 5000,5100, 5102 |
 
 ## Troubleshooting Docker containers
 

@@ -3,6 +3,12 @@
     name: avahi-daemon
     state: restarted
 
+- name: Restart Docker
+  listen: New certificates
+  service:
+    name: docker
+    state: restarted
+
 - name: Restart sshd
   service:
     name: sshd

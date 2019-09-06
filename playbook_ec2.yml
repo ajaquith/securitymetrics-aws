@@ -38,4 +38,5 @@
     - import_role:
         name: base
     - import_role:
-        name: docker
+        name: amazon
+      when: is_ec2_environment == true
