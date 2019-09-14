@@ -241,12 +241,10 @@ resource "aws_instance" "server" {
   }
   user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
   provisioner "local-exec" {
+    working_dir    = "."
     command        = <<-EOT
         wait 30; \
         ansible-playbook \
-            -vvv \
-            -i ${local.vars.ansible_inventory} \
-            --user ${local.vars.ansible_user} \
             --private-key ${local.vars.ec2_ssh_key} \
             --ssh-extra-args='-o StrictHostKeyChecking=no' \
             ${local.vars.ansible_playbook}

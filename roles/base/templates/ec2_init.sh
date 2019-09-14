@@ -23,3 +23,5 @@ docker run --name ecs-agent \
     --env=ECS_ENABLE_TASK_IAM_ROLE=true \
     --env=ECS_ENABLE_TASK_IAM_ROLE_NETWORK_HOST=true \
     amazon/amazon-ecs-agent:latest
+
+echo 'Completed initialization.'
