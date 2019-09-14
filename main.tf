@@ -22,6 +22,7 @@ data "aws_route53_zone" "server" {
   name = "${local.vars.server_domain}."
   private_zone = false
 }
+data "aws_iam_role" "ecsTaskExecutionRole" { name = "ecsTaskExecutionRole"}
 
 
 # ========== RESOURCES =========================================================
@@ -70,6 +71,65 @@ resource "aws_security_group" "nfs" {
   tags = {
     Name           = "${terraform.workspace}-nfs"
     Environment    = terraform.workspace
+  }
+}
+
+## --------- ECS cluster -------------------------------------------------------
+
+resource "aws_ecs_cluster" "hello" {
+  name = "${terraform.workspace}"
+  tags = {
+    Name         = "${terraform.workspace}-ecs"
+    Environment  = terraform.workspace
+  }
+}
+
+resource "aws_ecs_task_definition" "hello" {
+  family                     = "nginx-hello-${terraform.workspace}"
+  container_definitions      = jsonencode(
+    [
+      {
+        cpu                  = 0
+        environment          = []
+        essential            = true
+        hostname             = "nginx-hello-${terraform.workspace}.private"
+        image                = "nginxdemos/hello"
+        memoryReservation    = 256
+        mountPoints          = []
+        name                 = "nginx-hello"
+        portMappings         = [
+          {
+            hostPort         = 80
+            containerPort    = 80
+            protocol         = "tcp"
+          },
+        ]
+        volumesFrom          = []
+      },
+    ]
+  )
+  execution_role_arn         = data.aws_iam_role.ecsTaskExecutionRole.arn
+  network_mode               = "host"
+  memory                     = "256"
+  requires_compatibilities   = [ "EC2" ]
+  tags = {
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_ecs_service" "hello" {
+  name             = "hello-${terraform.workspace}"
+  cluster          = aws_ecs_cluster.hello.arn
+  task_definition  = aws_ecs_task_definition.hello.arn
+  launch_type      = "EC2"
+  scheduling_strategy = "REPLICA"
+  desired_count = 1
+  ordered_placement_strategy {
+    type  = "binpack"
+    field = "cpu"
+  }
+  lifecycle {
+    ignore_changes = ["desired_count"]
   }
 }
 
@@ -179,6 +239,7 @@ resource "aws_instance" "server" {
     Name           = local.vars.server_name
     Environment    = terraform.workspace
   }
+  user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
   provisioner "local-exec" {
     command        = <<-EOT
         wait 30; \

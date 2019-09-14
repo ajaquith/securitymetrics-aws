@@ -229,11 +229,15 @@ However, emails that aren't one of the whitelisted Mailman addresses result in a
 
 ## Docker
 
-Note: this property in daemon.json can't be set at the moment.
+Note: this property in `daemon.json` can't be set at the moment.
 
         "userland-proxy": false
 
+Note that these properties are not set in `daemon.json`, but will be, after ECS is verified as working:
 
+        "icc": false,
+        "no-new-privileges": true,
+        "userns-remap": "dremap"
 
 # Installing Prerequisites
 
@@ -417,7 +421,7 @@ As described in the [CloudWatch Quick Start guide](https://docs.aws.amazon.com/A
                         "logs:DescribeLogStreams"
                     ],
                     "Resource": [
-                        "arn:aws:logs:*:*:*"
+                        "arn:aws:logs:\*:\*:\*"
                     ]
                 }
             ]
