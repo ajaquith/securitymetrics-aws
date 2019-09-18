@@ -16,8 +16,6 @@ provider "aws" {
 
 # ========== DATA SOURCES (looked up by ID) ====================================
 
-data "aws_vpc" "default"     { id = local.vars.aws_vpc_id }
-data "aws_subnet" "default"  { id = local.vars.aws_vpc_subnet_id }
 data "aws_route53_zone" "server" {
   name = "${local.vars.server_domain}."
   private_zone = false
@@ -34,42 +32,113 @@ resource "aws_key_pair" "production" {
   public_key       = file("${local.vars.ec2_ssh_key}")
 }
 
-## --------- NFS shared storage ------------------------------------------------
+## --------- Virtual Private Cloud (VPC) ---------------------------------------
 
-resource "aws_efs_file_system" "nfs" {
-  creation_token   = "${terraform.workspace}-nfs"
+resource "aws_internet_gateway" "default" {
+  vpc_id           = aws_vpc.default.id
   tags = {
-    Name           = "${terraform.workspace}-nfs"
+    Name           = "igw"
     Environment    = terraform.workspace
   }
 }
 
-resource "aws_efs_mount_target" "nfs" {
+resource "aws_vpc" "default" {
+  cidr_block                           = local.vars.ec2_vpc_cidr
+  instance_tenancy                     = "default"
+  enable_dns_support                   = true
+  enable_dns_hostnames                 = true
+  enable_classiclink                   = false
+  enable_classiclink_dns_support       = false
+  assign_generated_ipv6_cidr_block     = false
+  tags = {
+    Name           = "vpc"
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_subnet" "az1" {
+  availability_zone                    = local.vars.ec2_subnet_1_az
+  cidr_block                           = local.vars.ec2_subnet_1_cidr
+  map_public_ip_on_launch              = true
+  assign_ipv6_address_on_creation      = false
+  vpc_id                               = aws_vpc.default.id
+  tags = {
+    Name                               = local.vars.ec2_subnet_1_az
+    Environment                        = terraform.workspace
+  }
+}
+
+resource "aws_subnet" "az2" {
+  availability_zone                    = local.vars.ec2_subnet_2_az
+  cidr_block                           = local.vars.ec2_subnet_2_cidr
+  map_public_ip_on_launch              = true
+  assign_ipv6_address_on_creation      = false
+  vpc_id                               = aws_vpc.default.id
+  tags = {
+    Name                               = local.vars.ec2_subnet_2_az
+    Environment                        = terraform.workspace
+  }
+}
+
+resource "aws_route" "internet" {
+  route_table_id             = aws_vpc.default.default_route_table_id
+  destination_cidr_block     = local.all_ipv4
+  gateway_id                 = aws_internet_gateway.default.id
+}
+
+resource "aws_route53_zone" "private" {
+  name             = local.private_zone
+  vpc {
+    vpc_id         = aws_vpc.default.id
+  }
+  tags = {
+    Name           = "zone"
+    Environment    = terraform.workspace
+  }
+}
+
+## --------- NFS shared storage ------------------------------------------------
+
+resource "aws_efs_file_system" "nfs" {
+  creation_token   = "nfs"
+  tags = {
+    Name           = "nfs"
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_efs_mount_target" "az1" {
   file_system_id   = aws_efs_file_system.nfs.id
-  subnet_id        = data.aws_subnet.default.id
+  subnet_id        = aws_subnet.az1.id
+  security_groups  = [aws_security_group.nfs.id]
+}
+
+resource "aws_efs_mount_target" "az2" {
+  file_system_id   = aws_efs_file_system.nfs.id
+  subnet_id        = aws_subnet.az2.id
   security_groups  = [aws_security_group.nfs.id]
 }
 
 resource "aws_security_group" "nfs" {
-  name             = "${terraform.workspace}-nfs"
+  name             = "nfs"
   description      = "NFS"
-  vpc_id           = data.aws_vpc.default.id
+  vpc_id           = aws_vpc.default.id
   ingress {
     description    = "NFS subnet"
     from_port      = 2049
     to_port        = 2049
     protocol       = "tcp"
-    cidr_blocks    = [data.aws_subnet.default.cidr_block]
+    cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
   }
   egress {
     description    = "Any subnet"
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = [data.aws_subnet.default.cidr_block]
+    cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
   }
   tags = {
-    Name           = "${terraform.workspace}-nfs"
+    Name           = "nfs"
     Environment    = terraform.workspace
   }
 }
@@ -79,20 +148,20 @@ resource "aws_security_group" "nfs" {
 resource "aws_ecs_cluster" "hello" {
   name = "${terraform.workspace}"
   tags = {
-    Name         = "${terraform.workspace}-ecs"
+    Name         = "ecs"
     Environment  = terraform.workspace
   }
 }
 
 resource "aws_ecs_task_definition" "hello" {
-  family                     = "nginx-hello-${terraform.workspace}"
+  family                     = "nginx-hello"
   container_definitions      = jsonencode(
     [
       {
         cpu                  = 0
         environment          = []
         essential            = true
-        hostname             = "nginx-hello-${terraform.workspace}.private"
+        hostname             = "nginx-hello.private"
         image                = "nginxdemos/hello"
         memoryReservation    = 256
         mountPoints          = []
@@ -113,12 +182,13 @@ resource "aws_ecs_task_definition" "hello" {
   memory                     = "256"
   requires_compatibilities   = [ "EC2" ]
   tags = {
-    Environment    = terraform.workspace
+    Name                     = "nginx-hello-task"
+    Environment              = terraform.workspace
   }
 }
 
 resource "aws_ecs_service" "hello" {
-  name             = "hello-${terraform.workspace}"
+  name             = "hello"
   cluster          = aws_ecs_cluster.hello.arn
   task_definition  = aws_ecs_task_definition.hello.arn
   launch_type      = "EC2"
@@ -131,22 +201,18 @@ resource "aws_ecs_service" "hello" {
   lifecycle {
     ignore_changes = ["desired_count"]
   }
+  tags = {
+    Name                     = "nginx-hello-service"
+    Environment              = terraform.workspace
+  }
 }
 
 ## --------- Server ------------------------------------------------------------
 
-resource "aws_eip" "server" {
-  instance         = aws_instance.server.id
-  tags = {
-    Name           = local.vars.server_name
-    Environment    = terraform.workspace
-  }
-}
-
 resource "aws_security_group" "ssh" {
-  name             = "${terraform.workspace}-ssh"
+  name             = "ssh"
   description      = "SSH"
-  vpc_id           = data.aws_vpc.default.id
+  vpc_id           = aws_vpc.default.id
   ingress {
     description    = "SSH"
     from_port      = 22
@@ -162,14 +228,15 @@ resource "aws_security_group" "ssh" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
+    Name           = "ssh"
     Environment    = terraform.workspace
   }
 }
 
 resource "aws_security_group" "smtp" {
-  name             = "${terraform.workspace}-smtp"
+  name             = "smtp"
   description      = "SMTP"
-  vpc_id           = data.aws_vpc.default.id
+  vpc_id           = aws_vpc.default.id
   ingress {
     description    = "SMTP"
     from_port      = 25
@@ -185,14 +252,15 @@ resource "aws_security_group" "smtp" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
+    Name           = "smtp"
     Environment    = terraform.workspace
   }
 }
 
 resource "aws_security_group" "https" {
-  name             = "${terraform.workspace}-https"
+  name             = "https"
   description      = "HTTP/S"
-  vpc_id           = data.aws_vpc.default.id
+  vpc_id           = aws_vpc.default.id
   ingress {
     description    = "HTTP"
     from_port      = 80
@@ -215,12 +283,13 @@ resource "aws_security_group" "https" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
+    Name           = "https"
     Environment    = terraform.workspace
   }
 }
 
 resource "aws_instance" "server" {
-  depends_on       = [aws_efs_mount_target.nfs]
+  depends_on       = [aws_efs_mount_target.az1, aws_efs_mount_target.az2, aws_route.internet]
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
@@ -229,7 +298,7 @@ resource "aws_instance" "server" {
                       aws_security_group.smtp.id,
                       aws_security_group.https.id]
   monitoring       = true
-  subnet_id        = data.aws_subnet.default.id
+  subnet_id        = aws_subnet.az1.id
   associate_public_ip_address = true
   tags = {
     Name           = local.vars.server_name
@@ -241,22 +310,29 @@ resource "aws_instance" "server" {
   }
   user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
   provisioner "local-exec" {
-    working_dir    = "."
     command        = <<-EOT
         wait 30; \
         ansible-playbook \
-            --private-key ${local.vars.ec2_ssh_key} \
             --ssh-extra-args='-o StrictHostKeyChecking=no' \
             ${local.vars.ansible_playbook}
         EOT
   }
 }
 
-resource "aws_route53_record" "server" {
-  zone_id          = data.aws_route53_zone.server.zone_id
-  name             = local.vars.server_name
+resource "aws_route53_record" "mail" {
+  zone_id          = aws_route53_zone.private.zone_id
+  name             = "mail.${local.private_zone}"
   type             = "A"
   ttl              = "300"
-  records          = [aws_eip.server.public_ip]
+  records          = [aws_instance.server.private_ip]
+  allow_overwrite  = true
+}
+
+resource "aws_route53_record" "www" {
+  zone_id          = aws_route53_zone.private.zone_id
+  name             = "www.${local.private_zone}"
+  type             = "A"
+  ttl              = "300"
+  records          = [aws_instance.server.private_ip]
   allow_overwrite  = true
 }

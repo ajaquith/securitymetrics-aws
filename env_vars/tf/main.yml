@@ -1,2 +1,5 @@
-server_domain: markerbench.com
-server_name: tf.markerbench.com
+ec2_vpc_cidr:      172.30.0.0/16
+ec2_subnet_1_cidr: 172.30.16.0/20
+ec2_subnet_2_cidr: 172.30.32.0/20
+server_domain:     markerbench.com
+server_name:       tf.markerbench.com
