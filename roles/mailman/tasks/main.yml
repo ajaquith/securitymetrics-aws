@@ -182,7 +182,7 @@
           environment:
           - "DATABASE_TYPE=postgres"
           - "DATABASE_URL=postgres://{{ postgres_user }}:{{ postgres_password }}@{{ mailman_db_host }}/{{ postgres_db }}"
-          - "DJANGO_ALLOWED_HOSTS={{ server_name }}"
+          - "DJANGO_ALLOWED_HOSTS=www.{{ public_domain }}"
           - "HYPERKITTY_API_KEY={{ hyperkitty_api_key }}"
           - "HYPERKITTY_URL=http://{{ mailman_web_host }}:8000/hyperkitty/"
           - "MAILMAN_ADMIN_USER={{ mailman_admin }}"
@@ -193,7 +193,7 @@
           - "MAILMAN_HOST={{ mailman_core_host }}"
           - "POSTORIUS_TEMPLATE_BASE_URL=http://{{ mailman_web_host }}:8000"
           - "SECRET_KEY={{ django_secret_key }}"
-          - "SERVE_FROM_DOMAIN={{ server_domain }}"
+          - "SERVE_FROM_DOMAIN={{ public_domain }}"
           - "SMTP_HOST={{ postfix_host }}"
           - "UWSGI_STATIC_MAP=/static=/opt/mailman-web-data/static"
           networks:
@@ -233,10 +233,10 @@
           ports:
             - "25:587"
           environment:
-          - "HOSTNAME={{ server_name }}"
+          - "HOSTNAME=mail.{{ public_domain }}"
           - "MYNETWORKS={{ docker_subnet }} 127.0.0.0/8"
-          - "ALLOWED_SENDER_DOMAINS={{ server_domain }}"
-          - "MASQUERADED_DOMAINS={{ server_domain }}"
+          - "ALLOWED_SENDER_DOMAINS={{ public_domain }}"
+          - "MASQUERADED_DOMAINS={{ public_domain }}"
           - "MESSAGE_SIZE_LIMIT=102400"
           networks:
             mailman:

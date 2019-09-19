@@ -1,13 +1,18 @@
 # ========== OUTPUT VARIABLES ==================================================
 
-output "server_name" {
-  description      = "Server name" 
-  value            = aws_instance.server.public_dns
+output "www_host" {
+  description      = "Web server name" 
+  value            = aws_instance.www.public_dns
+}
+
+output "mail_host" {
+  description      = "Web server name" 
+  value            = aws_instance.mail.public_dns
 }
 
 output "ec2_instance_id" {
   description      = "Instance ID"
-  value            = aws_instance.server.id
+  value            = aws_instance.www.id
 }
 
 output "efs_id" {

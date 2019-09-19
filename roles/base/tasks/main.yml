@@ -64,36 +64,6 @@
   pip:
     name: ['docker']
 
-- name: Add Docker remap group 'dremap'
-  group: 
-    name: dremap
-    state: present
-    system: yes
-  when: is_ec2_environment == false
-  notify: Restart Docker
-
-- name: Add Docker remap user 'dremap'
-  user: 
-    name: dremap
-    state: present
-    create_home: no
-    home:
-    shell: /sbin/nologin
-    system: yes
-  when: is_ec2_environment == false
-  notify: Restart Docker
-
-- name: Configure Docker user and group remappings
-  template:
-    src: "{{ item }}"
-    dest: /etc
-    mode: "a=r"
-  with_items:
-    - subuid
-    - subgid
-  when: is_ec2_environment == false
-  notify: Restart Docker
-
 - name: Configure Docker daemon
   template:
     src: daemon.json

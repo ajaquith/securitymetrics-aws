@@ -7,5 +7,7 @@
     "tag": "{{ '{{' }} .Name{{ '}}' }}/{{ '{{' }}.ID{{ '}}' }}"
   },
   "log-level": "info",
+  "icc": false,
+  "no-new-privileges": true,
   "live-restore": true
 }

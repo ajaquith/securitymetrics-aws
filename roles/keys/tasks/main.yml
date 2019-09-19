@@ -43,7 +43,7 @@
 
 - name: Create request for self-signed certificate
   openssl_csr:
-    common_name: "{{ server_name }}"
+    common_name: "www.{{ public_domain }}"
     country_name: "{{self_signed_country }}"
     organization_name: "{{ self_signed_org }}"
     organizational_unit_name: "{{ self_signed_ou }}"
@@ -83,7 +83,7 @@
 
 - name: Generate DKIM private key
   openssl_privatekey:
-    path: "{{ dkim_data }}/{{ server_domain }}.private"
+    path: "{{ dkim_data }}/{{ public_domain }}.private"
     type: RSA
     size: 2048
     mode: "u=r,g=r,o="
@@ -91,21 +91,21 @@
     
 - name: Generate DKIM public key
   openssl_publickey:
-    path: "{{ dkim_data }}/{{ server_domain }}.public"
-    privatekey_path: "{{ dkim_data }}/{{ server_domain }}.private"
+    path: "{{ dkim_data }}/{{ public_domain }}.public"
+    privatekey_path: "{{ dkim_data }}/{{ public_domain }}.private"
     format: "PEM"
     mode: "u=r,g=r,o="
     force: no
 
 - name: Get DKIM public key contents
-  command: "cat {{ dkim_data }}/{{ server_domain }}.public"
+  command: "cat {{ dkim_data }}/{{ public_domain }}.public"
   register: dkim_public_key
 
 # See https://help.returnpath.com/hc/en-us/articles/222481088-DKIM-DNS-record-overview
 - name: Save DKIM DNS record
   copy:
     content: "{{ dkim_public_key.stdout | dkim_record }}"
-    dest: "{{ dkim_data }}/{{ server_domain }}.txt"
+    dest: "{{ dkim_data }}/{{ public_domain }}.txt"
     mode: "u=r,g=r,o="
 
 # Generate Let's Encrypt TLS certificates
@@ -183,7 +183,7 @@
       openssl_csr:
         path: "{{ certificate_data }}/letsencrypt-csr.pem"
         privatekey_path: "{{ certificate_data }}/privkey.pem"
-        common_name: "{{ server_name }}"
+        common_name: "www.{{ public_domain }}"
         owner: "{{ certificate_user }}"
         group: "{{ certificate_user }}"
         mode: "u=r,g=r,o="

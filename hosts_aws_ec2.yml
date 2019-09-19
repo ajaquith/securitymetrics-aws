@@ -10,3 +10,10 @@ keyed_groups:
   - key: tags.Environment
     prefix: ""
     separator: ""
+    
+# Inject host variables based on EC2 instance tags and attributes
+compose:
+  ec2_environment: tags.Environment
+  ec2_region: placement_region
+  ec2_role: tags.Role
+  is_ec2_environment: true

@@ -6,6 +6,4 @@ ec2_region:        us-east-1                     # Region to deploy AWS environm
 ec2_subnet_1_az:   us-east-1a
 ec2_subnet_2_az:   us-east-1b
 ec2_instance_ami:  ami-039eb499c36219cad         # ID of the AMI used for EC2 instances
-server_domain:     markerbench.com               # Domain of the server, eg securitymetrics.org
-server_name:       tf.markerbench.com            # FQDN of the server eg staging.markerbench.com
 ansible_playbook:  playbook_ec2.yml              # Ansible playbook for provisioning EC2 instances

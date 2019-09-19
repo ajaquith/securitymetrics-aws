@@ -28,7 +28,7 @@ The Terraform configuration file `main.tf` describes how to create production en
 
 The [Alpine Amazon Machine Images (AMIs)](https://github.com/ajaquith/alpine-ec2-ami) used for EC2 nodes are based on a current version of Alpine Linux. Exactly one machine for each fully-qualified domain name is created. The AWS Virtual Private cloud the node is placed into is configurable and is assumed to already exist; the VPC is _not_ provisioned by Terraform. An Elastic IP is created if necessary and assigned to Internet-facing nodes, and matching DNS A records are placed into the top-level DNS zone (_eg,_ securitymetrics.org) managed by AWS Route 53.
 
-The Terraform plan ensures that exactly one EC2 host with the name `server_name` in a given environment is created, along with an associated security group, Elastic IP and DNS record. The AWS `Name` and `Environment` tags uniquely identify the single instance of EC2 node, security group, Elastic IP address, DNS A record and DNS MX record. It is executed in the project root directory, with the environment variables passed as a parameter:
+The Terraform plan ensures that exactly one EC2 host with names `www`.`_public_domain_` and `mail`.`_public_domain_` in a given environment is created, along with an associated security group, Elastic IP and DNS record. The AWS `Name` and `Environment` tags uniquely identify the single instance of EC2 node, security group, Elastic IP address, DNS A record and DNS MX record. It is executed in the project root directory, with the environment variables passed as a parameter:
 
         terraform apply
 
@@ -42,13 +42,13 @@ The Terraform plan:
 
 3. Creates an AWS security group, in the subnet `aws_vpc_subnet_id`, for each port opened to the Internet: 22 (SSH), 25 (SMTP), and 80/443 (HTTP/HTTPS). The groups are named _`environment`_`-ssh`, _`environment`_`-smtp`, and _`environment`_`-https` respectively. HTTP and HTTPS are combined in the same security group. Each security group allows traffic to or from any IP address. Each group is tagged with Environment _`environment`_.
 
-4. Creates an EC2 node named `server_name`, in the VPC subnet `aws_vpc_subnet_id`, using the AMI `ec2_instance_ami` as the source. This AMI is a [current version of Alpine Linux](https://github.com/ajaquith/alpine-ec2-ami). The playbook does _not_ assign a public IP address, but enables monitoring, and sets the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively. It assigns the IAM instance profile role `ec2_iam_role`.
+4. Creates an EC2 node named `www`.`_public_domain_`, in the VPC subnet `aws_vpc_subnet_id`, using the AMI `ec2_instance_ami` as the source. This AMI is a [current version of Alpine Linux](https://github.com/ajaquith/alpine-ec2-ami). The playbook does _not_ assign a public IP address, but enables monitoring, and sets the `Name`  and `Environment` tags to `www`.`_public_domain_` and `ec2_environment`, respectively. It assigns the IAM instance profile role `ec2_iam_role`.
 
-5. Creates an EC2 Elastic IP, if it does not already exist, setting the `Name`  and `Environment` tags to `server_name` and `ec2_environment`, respectively.
+5. Creates an EC2 Elastic IP, if it does not already exist, setting the `Name`  and `Environment` tags to `www`.`_public_domain_` and `ec2_environment`, respectively.
 
 6. Associates the EC2 Elastic IP with the EC2 node.
 
-7. Registers a DNS `A` record with Amazon Route 53 in the `server_domain` hosted DNS zone, with the record's name set to `server_name` and the value set to the Elastic IP address.
+7. Registers a DNS `A` record with Amazon Route 53 in the `public_domain` hosted DNS zone, with the record's name set to `www`.`_public_domain_` and the value set to the Elastic IP address.
 
 After Terraform creates the EC2 node, the Ansible playbook `playbook_ec2.yml` configures it (see the next section). Integration with Ansible is achieved as follows. The Terraform configuration declares a `local-exec` provisioner that runs the `ansible-playbook` command to execute a playbook (default: `playbook_ec2.yml`).
 
@@ -86,7 +86,7 @@ The `base` role installs all of the essential services needed for a basic machin
 
 5. Configures the host's kernel to use swap-memory limits, an important feature for Docker. As described in the [Alpine wiki](https://wiki.alpinelinux.org/wiki/Docker), the playbook adds the `cgroup_enable=memory swapaccount=1` to the `extlinux` configuration (`/etc/update-extlinux.conf`), and notifies Ansible to reboot the host if the values changed.
 
-6. Sets the hostname to `server_name`.
+6. Sets the hostname to `www`.`_public_domain_`.
 
 7. Flushes any notified handlers, which may cause `sshd` or `avahi-daemon` to restart if their configurations changed. If swap memory support is newly enabled, the server reboots. If the server reboots, Ansible will wait for up to 5 minutes for the host to be up again before proceeding.
 
@@ -130,9 +130,9 @@ The `keys` generates a self-signed TLS certificate for use with mail or web serv
 
 4. Generates a TLS certificate private key `privkey.pem`, certificate signing request (CSR) `selfsigned-csr.pem`, and self-signed TLS certificate `fullchain.pem`, placing the results in `certificate_data`. The owner has read-write permissions; the group is read-only.
 
-5. Creates a directory for DKIM keys, and then creates a PEM-encoded 2048-bit public-private key pair to be stored in it. The files are called  `{{ server_domain }}.private` and `{{ server_domain }}.public`, respectively. Owner and group have read-only permissions. _Note: the Ansible DKIM creation tasks do not specify an owner or group for the directory, or for any of the files within it; these default to `root`. Later roles (eg the `mailman` role sets ownership. This strategy allows Ansible to ensure that the files exist, without setting ownership here that is later overridden by `mailman` (which shows as a undesirable "change")._
+5. Creates a directory for DKIM keys, and then creates a PEM-encoded 2048-bit public-private key pair to be stored in it. The files are called  `{{ public_domain }}.private` and `{{ public_domain }}.public`, respectively. Owner and group have read-only permissions. _Note: the Ansible DKIM creation tasks do not specify an owner or group for the directory, or for any of the files within it; these default to `root`. Later roles (eg the `mailman` role sets ownership. This strategy allows Ansible to ensure that the files exist, without setting ownership here that is later overridden by `mailman` (which shows as a undesirable "change")._
 
-6. Creates the value of the DNS `TXT` DKIM record, which contains the public key. The content is derived from the DKIM public key file `{{ server_domain }}.public`, passed through a custom Ansible filter called `dkim_record`. This filter is stored in `mail_security/filter_plugins/dkim_record.py`. The output is stored in `{{ server_domain }}.txt`. As with the DKIM public and private keys, owner and group have read-only permissions but the names of owner and group are not specified; they default to `root`.
+6. Creates the value of the DNS `TXT` DKIM record, which contains the public key. The content is derived from the DKIM public key file `{{ public_domain }}.public`, passed through a custom Ansible filter called `dkim_record`. This filter is stored in `mail_security/filter_plugins/dkim_record.py`. The output is stored in `{{ public_domain }}.txt`. As with the DKIM public and private keys, owner and group have read-only permissions but the names of owner and group are not specified; they default to `root`.
 
 7. If `letsencrypt_certificates` is true, installs the `openssl` package, `acme-tiny` for creating Let's Encrypt TLS certificates. The role also creates an account directory `letsencrypt_account_dir` and copies the Let's Encrypt account key to it, setting the permissions for the directory for read-write for the owner (`certificate_user`) and read-only for the group (also `certificate_user`).  It sets the permissions for the account key to read-only for the owner and group, and copies a templated ACME renewal script `renew_certs.sh` to the account directory. It creates an empty ACME challenge directory `acme_challenge_data` and sets its owner and group to `certificate_user`, with read-write privileges for owner and read for others. Finally, the role adds a `cron` job to run the renewal script on the first day of every month. 
 
@@ -190,11 +190,11 @@ For Amazon servers running a mail server, the `update_dns` tasks create a DKIM r
 
 For security reasons, the portions of this role that update Amazon Web Services do not execute on the remote host; these steps use the `local_action` idiom to execute on the Ansible controller workstation. The role:
 
-1. Registers a DNS `MX` record with Amazon Route 53 in the `server_domain` hosted DNS zone, with the record's name set to `server_domain` and the value set to the Elastic IP address.
+1. Registers a DNS `MX` record with Amazon Route 53 in the `public_domain` hosted DNS zone, with the record's name set to `public_domain` and the value set to the Elastic IP address.
 
-2. Registers a DNX `TXT` SPF record indicating that the host shown in the MX record is allowed to send mail on behalf of `server_domain`, with no other allowed sending IPs, and that any other purporting to be from `server_domain` should be rejected. The resulting SPF syntax for the record is short and sweet: `"v=spf1 mx -all"`.
+2. Registers a DNX `TXT` SPF record indicating that the host shown in the MX record is allowed to send mail on behalf of `public_domain`, with no other allowed sending IPs, and that any other purporting to be from `public_domain` should be rejected. The resulting SPF syntax for the record is short and sweet: `"v=spf1 mx -all"`.
 
-5. Registers a DNS `TXT` record with Amazon Route 53 in the `server_domain` hosted DNS zone, with the record's name set to `server_domain` and the value set to the results of the previous step.
+5. Registers a DNS `TXT` record with Amazon Route 53 in the `public_domain` hosted DNS zone, with the record's name set to `public_domain` and the value set to the results of the previous step.
 
 ## The `import_archive` role
 
@@ -204,7 +204,7 @@ The `import_archive` role imports the legacy Mailman 2.1 `securitymetrics` maili
 
 2.  Copies the mailing list archives (`discuss.mbox`) from the project directory's `etc` directory to `mailman_core/` on the host.
 
-3. Creates a new mailing list `discuss` for the domain `server_domain`.
+3. Creates a new mailing list `discuss` for the domain `public_domain`.
 
 4. Imports the mailing list configuration into Mailman 3, by executing the command `mailman import21` inside the `mailman-core` container.
 

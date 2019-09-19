@@ -17,16 +17,16 @@
         dest: "{{ mailman_web_data }}"
         mode: "u=r,g=r,o="
     - name: Create mailing list
-      command: "docker exec mailman-core bash -l -c 'mailman create discuss@{{ server_domain }}'"
+      command: "docker exec mailman-core bash -l -c 'mailman create discuss@{{ public_domain }}'"
       register: list.create
     - name: Import mailing list config
-      command: "docker exec mailman-core bash -l -c 'mailman import21 discuss@{{ server_domain }} config.pck'"
+      command: "docker exec mailman-core bash -l -c 'mailman import21 discuss@{{ public_domain }} config.pck'"
       register: list.import
     - name: Import mailing list archives
-      command: "docker exec mailman-web bash -l -c 'python3 manage.py hyperkitty_import -l discuss@{{ server_domain }} ../mailman-web-data/discuss.mbox'"
+      command: "docker exec mailman-web bash -l -c 'python3 manage.py hyperkitty_import -l discuss@{{ public_domain }} ../mailman-web-data/discuss.mbox'"
       register: archive.import
     - name: Index mailing list archives
-      command: "docker exec mailman-web bash -l -c 'python3 manage.py update_index_one_list discuss@{{ server_domain }}'"
+      command: "docker exec mailman-web bash -l -c 'python3 manage.py update_index_one_list discuss@{{ public_domain }}'"
       register: archive.index
     - name: Leave memento
       file:

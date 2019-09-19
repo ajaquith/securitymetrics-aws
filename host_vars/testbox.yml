@@ -1,5 +1,3 @@
-server_domain: markerbench.com                                   # Domain of mailman, webserver, etc. (eg 'testbox.local', 'securitymetrics.org')
-server_name: staging.markerbench.com                             # Fully qualified name of the webserver (eg 'testbox.local')
+public_domain: markerbench.com                                   # Domain of mailman, webserver, etc. (eg 'testbox.local', 'securitymetrics.org')
 import_archive: false
 letsencrypt_certificates: true
-ec2_environment: testing

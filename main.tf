@@ -16,8 +16,8 @@ provider "aws" {
 
 # ========== DATA SOURCES (looked up by ID) ====================================
 
-data "aws_route53_zone" "server" {
-  name = "${local.vars.server_domain}."
+data "aws_route53_zone" "public" {
+  name = "${local.vars.public_domain}."
   private_zone = false
 }
 data "aws_iam_role" "ecsTaskExecutionRole" { name = "ecsTaskExecutionRole"}
@@ -207,7 +207,7 @@ resource "aws_ecs_service" "hello" {
   }
 }
 
-## --------- Server ------------------------------------------------------------
+## --------- Server security groups --------------------------------------------
 
 resource "aws_security_group" "ssh" {
   name             = "ssh"
@@ -288,7 +288,9 @@ resource "aws_security_group" "https" {
   }
 }
 
-resource "aws_instance" "server" {
+## --------- Servers -----------------------------------------------------------
+
+resource "aws_instance" "www" {
   depends_on       = [aws_efs_mount_target.az1, aws_efs_mount_target.az2, aws_route.internet]
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
@@ -301,12 +303,48 @@ resource "aws_instance" "server" {
   subnet_id        = aws_subnet.az1.id
   associate_public_ip_address = true
   tags = {
-    Name           = local.vars.server_name
+    Name           = "www"
     Environment    = terraform.workspace
+    Role           = "www"
   }
   volume_tags = {
-    Name           = local.vars.server_name
+    Name           = "www"
     Environment    = terraform.workspace
+    Role           = "www"
+  }
+  user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
+}
+
+resource "aws_route53_record" "www" {
+  zone_id          = aws_route53_zone.private.zone_id
+  name             = "www.${local.private_zone}"
+  type             = "A"
+  ttl              = "300"
+  records          = [aws_instance.www.private_ip]
+  allow_overwrite  = true
+}
+
+resource "aws_instance" "mail" {
+  depends_on       = [aws_instance.www]
+  key_name         = local.vars.ec2_ssh_key_name
+  ami              = local.vars.ec2_instance_ami
+  instance_type    = local.vars.ec2_instance_type
+  iam_instance_profile = local.vars.ec2_iam_role
+  vpc_security_group_ids = [aws_security_group.ssh.id,
+                      aws_security_group.smtp.id,
+                      aws_security_group.https.id]
+  monitoring       = true
+  subnet_id        = aws_subnet.az1.id
+  associate_public_ip_address = true
+  tags = {
+    Name           = "mail"
+    Environment    = terraform.workspace
+    Role           = "mail"
+  }
+  volume_tags = {
+    Name           = "mail"
+    Environment    = terraform.workspace
+    Role           = "mail"
   }
   user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
   provisioner "local-exec" {
@@ -324,15 +362,6 @@ resource "aws_route53_record" "mail" {
   name             = "mail.${local.private_zone}"
   type             = "A"
   ttl              = "300"
-  records          = [aws_instance.server.private_ip]
-  allow_overwrite  = true
-}
-
-resource "aws_route53_record" "www" {
-  zone_id          = aws_route53_zone.private.zone_id
-  name             = "www.${local.private_zone}"
-  type             = "A"
-  ttl              = "300"
-  records          = [aws_instance.server.private_ip]
+  records          = [aws_instance.mail.private_ip]
   allow_overwrite  = true
 }

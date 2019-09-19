@@ -9,23 +9,23 @@
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     state: present
-    zone: "{{ server_domain }}"
-    record: "{{ server_domain }}"
+    zone: "{{ public_domain }}"
+    record: "{{ public_domain }}"
     type: MX
     ttl: 300
-    value: "10 {{ server_name }}."
+    value: "10 mail.{{ public_domain }}."
     overwrite: yes
     wait: yes
   become: no
 
-- name: "Register SPF record for {{ server_domain }}"
+- name: "Register SPF record for {{ public_domain }}"
   local_action:
     module: route53
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     state: present
-    zone: "{{ server_domain }}"
-    record: "{{ server_domain }}"
+    zone: "{{ public_domain }}"
+    record: "{{ public_domain }}"
     type: TXT
     ttl: 3600
     value: '"v=spf1 mx -all"'
@@ -39,8 +39,8 @@
     aws_access_key: "{{ aws_access_key }}"
     aws_secret_key: "{{ aws_secret_key }}"
     state: present
-    zone: "{{ server_domain }}"
-    record: "mail._domainkey.{{ server_domain }}"
+    zone: "{{ public_domain }}"
+    record: "mail._domainkey.{{ public_domain }}"
     type: TXT
     ttl: 3600
     value: "{{ dkim_public_key.stdout | dkim_record }}"
