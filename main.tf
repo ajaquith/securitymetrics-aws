@@ -306,13 +306,14 @@ resource "aws_instance" "www" {
     Name           = "www"
     Environment    = terraform.workspace
     Role           = "www"
+    EfsVolume      = aws_efs_file_system.nfs.id
   }
   volume_tags = {
     Name           = "www"
     Environment    = terraform.workspace
     Role           = "www"
   }
-  user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
+  user_data        = file("roles/base/templates/ec2_init.sh")
 }
 
 resource "aws_route53_record" "www" {
@@ -340,13 +341,14 @@ resource "aws_instance" "mail" {
     Name           = "mail"
     Environment    = terraform.workspace
     Role           = "mail"
+    EfsVolume      = aws_efs_file_system.nfs.id
   }
   volume_tags = {
     Name           = "mail"
     Environment    = terraform.workspace
     Role           = "mail"
   }
-  user_data        = templatefile("roles/base/templates/ec2_init.sh", { cluster = terraform.workspace, nfs_id = aws_efs_file_system.nfs.id })
+  user_data        = file("roles/base/templates/ec2_init.sh")
   provisioner "local-exec" {
     command        = <<-EOT
         wait 30; \
