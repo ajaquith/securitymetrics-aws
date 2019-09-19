@@ -181,6 +181,10 @@ resource "aws_ecs_task_definition" "hello" {
   network_mode               = "host"
   memory                     = "256"
   requires_compatibilities   = [ "EC2" ]
+  placement_constraints {
+    type           = "memberOf"
+    expression     = "attribute:Role == 'www'"
+  }
   tags = {
     Name                     = "nginx-hello-task"
     Environment              = terraform.workspace
@@ -193,17 +197,17 @@ resource "aws_ecs_service" "hello" {
   task_definition  = aws_ecs_task_definition.hello.arn
   launch_type      = "EC2"
   scheduling_strategy = "REPLICA"
-  desired_count = 1
+  desired_count    = 1
   ordered_placement_strategy {
-    type  = "binpack"
-    field = "cpu"
+    type           = "binpack"
+    field          = "memory"
   }
   lifecycle {
     ignore_changes = ["desired_count"]
   }
   tags = {
-    Name                     = "nginx-hello-service"
-    Environment              = terraform.workspace
+    Name           = "nginx-hello-service"
+    Environment    = terraform.workspace
   }
 }
 
