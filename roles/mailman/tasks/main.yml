@@ -1,48 +1,16 @@
-- name: "Add Postgres group 'postgres'"
-  group: 
-    name: postgres
-    state: present
-    gid: "70"
-
-- name: "Add Postgres user 'postgres'"
-  user: 
-    name: postgres
-    state: present
-    create_home: yes
-    home: "{{ postgres_data }}"
-    shell: /bin/sh
-    group: postgres
-    uid: "70"
-
 - name: "Create Postgres data directory {{ postgres_data }}"
   file:
     path: "{{ postgres_data }}/"
     state: directory
-    owner: postgres
-    group: postgres
+    owner: "{{ postgres_uid }}"
+    group: "{{ postgres_gid }}"
     mode: "u=rwx,g=,o="
-
-- name: "Add Mailman group 'mailman'"
-  group: 
-    name: mailman
-    state: present
-    gid: "101"
-
-- name: "Add Mailman user 'mailman'"
-  user: 
-    name: mailman
-    state: present
-    create_home: yes
-    home: "{{ mailman_core }}"
-    shell: /bin/sh
-    group: mailman
-    uid: "100"
 
 - name: "Create Mailman core directory {{ mailman_core }}"
   file:
     path: "{{ mailman_core }}/"
     state: directory
-    owner: mailman
+    owner: "{{ mailman_uid }}"
     group: root
     mode: "u=rwx,g=rx,o="
 
@@ -50,7 +18,7 @@
   file:
     path: "{{ mailman_core }}/var/"
     state: directory
-    owner: mailman
+    owner: "{{ mailman_uid }}"
     group: root
     mode: "u=rwx,g=rx,o="
 
@@ -58,15 +26,15 @@
   file:
     path: "{{ mailman_core }}/var/data/"
     state: directory
-    owner: mailman
-    group: mailman
-    mode: "u=rwx,g=srx,o="
+    owner: "{{ mailman_uid }}"
+    group: "{{ mailman_gid }}"
+    mode: "u=rwx,g=srx,o=rx"
 
 - name: Configure Mailman core
   template:
     src: mailman-extra.cfg
     dest: "{{ mailman_core }}/"
-    owner: mailman
+    owner: "{{ mailman_uid }}"
     group: root
     mode: "u=r,g=r,o="
   notify: Restart mailman-core
@@ -75,16 +43,16 @@
   file:
     path: "{{ mailman_web_data }}/"
     state: directory
-    owner: mailman
-    group: mailman
+    owner: "{{ mailman_uid }}"
+    group: "{{ mailman_gid }}"
     mode: "u=rwx,g=rx,o="
 
 - name: Configure Mailman web
   template:
     src: settings_local.py
     dest: "{{ mailman_web_data }}/"
-    owner: mailman
-    group: mailman
+    owner: "{{ mailman_uid }}"
+    group: "{{ mailman_gid }}"
     mode: "u=r,g=r,o="
   notify: Restart mailman-web
 
@@ -104,44 +72,47 @@
   template:
     src: configure_postfix.sh
     dest: "{{ postfix_init }}/"
-    owner: mailman
-    group: root
+    owner: "{{ postfix_uid }}"
+    group: "{{ postfix_gid }}"
     mode: "u=r,g=,o="
   notify: Restart postfix
 
-- name: "Add Postfix and nginx runtime users to '{{ certificate_user }}' and mailman groups"
-  user:
-    name: "{{ item }}"
-    groups:
-      - "{{ certificate_user }}"
-      - mailman
-    append: yes
-  with_items:
-    - mailman
-    - root
-    
-- name: "Set DKIM keys directory {{ dkim_data }} ownership to container 'opendkim'"
+- name: "Make 'postfix' owner of STARTTLS keys directory {{ certificate_data }}/mail"
+  file:
+    path: "{{ certificate_data }}/mail"
+    state: directory
+    owner: "{{ postfix_uid }}"
+    group: "{{ postfix_gid }}"
+
+- name: "Set DKIM keys directory {{ dkim_data }} ownership to user 'opendkim'"
   file:
     path: "{{ dkim_data }}"
     state: directory
-    owner: "102"
-    group: "103"
+    owner: "{{ opendkim_uid }}"
+    group: "{{ opendkim_gid }}"
     recurse: yes
     
 - name: "Create Nginx directory {{ nginx_conf }}/conf.d/"
   file:
     path: "{{ nginx_conf }}/conf.d/"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ nginx_uid }}"
+    group: "{{ nginx_gid }}"
     mode: "u=rx,g=rx,o="
+
+- name: "Make Nginx owner of HTTPS keys directory {{ certificate_data }}/www"
+  file:
+    path: "{{ certificate_data }}/www"
+    state: directory
+    owner: "{{ nginx_uid }}"
+    group: "{{ nginx_gid }}"
 
 - name: Configure Nginx
   template:
     src: "{{ item.name }}"
     dest: "{{ nginx_conf }}/{{ item.dest }}"
-    owner: root
-    group: root
+    owner: "{{ nginx_uid }}"
+    group: "{{ nginx_gid }}"
     mode: "u=r,g=r,o="
   with_items:
     - { name: 'nginx.conf',   dest: '/' }
@@ -242,7 +213,7 @@
 #          volumes:
 #          - "{{ postfix_data }}:/var/spool/postfix"
 #          - "{{ postfix_log }}:/var/log/postfix"
-#          - "{{ certificate_data }}:/etc/tls:ro"
+#          - "{{ certificate_data }}/mail:/etc/tls:ro"
 #          - "{{ dkim_data }}:/etc/opendkim/keys:ro"
 #          - "{{ mailman_core }}/var/data:/var/data/mailman:ro"
 #          - "{{ postfix_init }}:/docker-init.db:ro"
@@ -268,7 +239,7 @@
 #          volumes:
 #          - "{{ nginx_log }}:/var/log/nginx"
 #          - "{{ acme_challenge_data }}:/var/www/acme:ro"
-#          - "{{ certificate_data }}:/etc/tls:ro"
+#          - "{{ certificate_data }}/www:/etc/tls:ro"
 #          - "{{ mailman_web_data }}:/opt/mailman-web-data:ro"
 #          - "{{ nginx_conf }}:/etc/nginx:ro"
 #          - "{{ nginx_html }}:/usr/share/nginx/html:ro"

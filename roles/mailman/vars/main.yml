@@ -46,10 +46,22 @@ postgres_password: !vault |
           3836636364653132360a633231323038386439623863633565393332313535643634616430623631
           31623538666461633266356538636234666430646432643766333035653939373438
 
-# These should not be changed
+# Hosts: these should not be changed
 mailman_core_host: 172.19.199.2
 mailman_web_host: 172.19.199.3
 mailman_db_host: 172.19.199.4
 postfix_host: 172.19.199.5
 nginx_host: 172.19.199.6
 docker_subnet: 172.19.199.0/24
+
+# Users and groups: these should not be changed
+postgres_uid:  "70"
+postgres_gid:  "70"
+mailman_uid:  "100"
+mailman_gid:  "101"
+postfix_uid:  "100"
+postfix_gid:    "0"
+opendkim_uid: "102"
+opendkim_gid: "103"
+nginx_uid:      "0"
+nginx_gid:      "0"

@@ -2,8 +2,6 @@ acme_challenge_data: /opt/keys/acme/challenge
 acme_temp: /opt/keys/acme/tmp
 acme_tiny_install: /usr/local/share/acme-tiny
 certificate_data: /opt/keys/tls
-certificate_user: certs
-certificate_uid: 6000
 tls_key_size: 4096
 dkim_data: /opt/keys/dkim
 letsencrypt_account_dir: /opt/keys/acme/account

@@ -7,70 +7,54 @@
   pip:
     name: ['pyopenssl']
 
-- name: "Add group '{{ certificate_user }}' (gid={{ certificate_uid }})"
-  group:
-    name: "{{ certificate_user }}"
-    state: present
-    gid: "{{ certificate_uid }}"
-
-- name: "Add user '{{ certificate_user }}' (uid={{ certificate_uid }})"
-  user:
-    name: "{{ certificate_user }}"
-    state: present
-    create_home: yes
-    home: "{{ certificate_data }}"
-    shell: /sbin/nologin
-    group: "{{ certificate_user }}"
-    uid: "{{ certificate_uid }}"
-
 # Generate self-signed TLS certificates
 
-- name: "Set certificate directory permissions"
+- name: "Create certificate directory"
   file:
-    path: "{{ certificate_data }}"
+    path: "{{ certificate_data }}/{{ ec2_role }}"
     state: directory
-    owner: "{{ certificate_user }}"
-    group: "{{ certificate_user }}"
+    owner: root
+    group: root
     mode: "u=rwx,g=rx,o="
 
 - name: Generate private key for certificate
   openssl_privatekey:
-    path: "{{ certificate_data }}/privkey.pem"
+    path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
     size: "{{ tls_key_size }}"
-    owner: "{{ certificate_user }}"
-    group: "{{ certificate_user }}"
+    owner: root
+    group: root
     mode: "u=rw,g=r,o="
 
 - name: Create request for self-signed certificate
   openssl_csr:
-    common_name: "www.{{ public_domain }}"
+    common_name: "{{ ec2_role }}.{{ public_domain }}"
     country_name: "{{self_signed_country }}"
     organization_name: "{{ self_signed_org }}"
     organizational_unit_name: "{{ self_signed_ou }}"
-    privatekey_path: "{{ certificate_data }}/privkey.pem"
-    path: "{{ certificate_data }}/selfsigned-csr.pem"
-    owner: "{{ certificate_user }}"
-    group: "{{ certificate_user }}"
+    privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
+    path: "{{ certificate_data }}/{{ ec2_role }}/selfsigned-csr.pem"
+    owner: root
+    group: root
     mode: "u=rw,g=r,o="
 
 - name: Generate self-signed certificate
   openssl_certificate:
     provider: selfsigned
-    csr_path: "{{ certificate_data }}/selfsigned-csr.pem"
-    privatekey_path: "{{ certificate_data }}/privkey.pem"
-    path: "{{ certificate_data }}/fullchain.pem"
-    owner: "{{ certificate_user }}"
-    group: "{{ certificate_user }}"
+    csr_path: "{{ certificate_data }}/{{ ec2_role }}/selfsigned-csr.pem"
+    privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
+    path: "{{ certificate_data }}/{{ ec2_role }}/fullchain.pem"
+    owner: root
+    group: root
     mode: "u=rw,g=r,o="
     force: no
   notify: New certificates
 
 - name: Generate Diffie-Hellman parameters for TLS
   openssl_dhparam:
-    path: "{{ certificate_data }}/dhparams.pem"
+    path: "{{ certificate_data }}/{{ ec2_role }}/dhparams.pem"
     size: "{{ tls_key_size }}"
-    owner: "{{ certificate_user }}"
-    group: "{{ certificate_user }}"
+    owner: root
+    group: root
     mode: "u=rw,g=r,o="
 
 # Generate DKIM keys
@@ -112,7 +96,7 @@
 
 - name: Get current certificate info
   openssl_certificate_info:
-    path: "{{ certificate_data }}/fullchain.pem"
+    path: "{{ certificate_data }}/{{ ec2_role }}/fullchain.pem"
     valid_at:
       in_one_month: "+30d"
   register: tls_certificate
@@ -139,8 +123,8 @@
       file:
         path: "{{ letsencrypt_account_dir }}"
         state: directory
-        owner: "{{ certificate_user }}"
-        group: "{{ certificate_user }}"
+        owner: root
+        group: root
         mode: "u=rwx,g=rx,o=rx"
 
     - name: Copy Let's Encrypt account key
@@ -148,24 +132,24 @@
         content: "{{ letsencrypt_private_key }}"
         decrypt: yes
         dest: "{{ letsencrypt_account_dir }}/account.key"
-        owner: "{{ certificate_user }}"
-        group: "{{ certificate_user }}"
+        owner: root
+        group: root
         mode: "u=r,g=r,o="
 
     - name: Copy ACME renewal script
       template:
         src: renew_certs.sh
         dest: "{{ letsencrypt_account_dir }}/"
-        owner: "{{ certificate_user }}"
-        group: "{{ certificate_user }}"
+        owner: root
+        group: root
         mode: "u=rx,g=rx,o="
 
     - name: "Create ACME challenge directory {{ acme_challenge_data }}"
       file:
         path: "{{ acme_challenge_data }}"
         state: directory
-        owner: "{{ certificate_user }}"
-        group: "{{ certificate_user }}"
+        owner: root
+        group: root
         mode: "u=rwx,g=rx,o=rx"
         
     - name: Schedule weekly check for Let's Encrypt certificate renewals
@@ -181,11 +165,11 @@
   block:
     - name: Create request for Let's Encrypt TLS certificate
       openssl_csr:
-        path: "{{ certificate_data }}/letsencrypt-csr.pem"
-        privatekey_path: "{{ certificate_data }}/privkey.pem"
-        common_name: "www.{{ public_domain }}"
-        owner: "{{ certificate_user }}"
-        group: "{{ certificate_user }}"
+        path: "{{ certificate_data }}/{{ ec2_role }}/letsencrypt-csr.pem"
+        privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
+        common_name: "{{ ec2_role }}.{{ public_domain }}"
+        owner: root
+        group: root
         mode: "u=r,g=r,o="
         
     - name: Create temporary ACME config directory for nginx
@@ -216,11 +200,11 @@
         provider: acme
         acme_accountkey_path: "{{ letsencrypt_account_dir }}/account.key"
         acme_challenge_path: "{{ acme_challenge_data }}"
-        path: "{{ certificate_data }}/fullchain.pem"
-        csr_path: "{{ certificate_data }}/letsencrypt-csr.pem"
-        privatekey_path: "{{ certificate_data }}/privkey.pem"
-        owner: "{{ certificate_user }}"
-        group: "{{ certificate_user }}"
+        path: "{{ certificate_data }}/{{ ec2_role }}/fullchain.pem"
+        csr_path: "{{ certificate_data }}/{{ ec2_role }}/letsencrypt-csr.pem"
+        privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
+        owner: root
+        group: root
         mode: "u=r,g=r,o="
         force: yes
         backup: yes

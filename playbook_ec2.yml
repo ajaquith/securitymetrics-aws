@@ -26,10 +26,9 @@
       when: is_ec2_environment == true
     - import_role:
         name: keys
+    - import_role:
+        name: mailman
       run_once: yes
-#    - import_role:
-#        name: mailman
-#      run_once: yes
     - import_role:
         name: import_archive
       when: import_archive == true

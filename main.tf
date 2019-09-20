@@ -37,7 +37,7 @@ resource "aws_key_pair" "production" {
 resource "aws_internet_gateway" "default" {
   vpc_id           = aws_vpc.default.id
   tags = {
-    Name           = "igw"
+    Name           = terraform.workspace
     Environment    = terraform.workspace
   }
 }
@@ -51,7 +51,7 @@ resource "aws_vpc" "default" {
   enable_classiclink_dns_support       = false
   assign_generated_ipv6_cidr_block     = false
   tags = {
-    Name           = "vpc"
+    Name           = terraform.workspace
     Environment    = terraform.workspace
   }
 }
@@ -339,7 +339,7 @@ resource "aws_instance" "mail" {
                       aws_security_group.smtp.id,
                       aws_security_group.https.id]
   monitoring       = true
-  subnet_id        = aws_subnet.az1.id
+  subnet_id        = aws_subnet.az2.id
   associate_public_ip_address = true
   tags = {
     Name           = "mail"
