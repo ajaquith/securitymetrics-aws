@@ -1,0 +1,13 @@
+{ 
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Principal": {
+        "Service": "ecs-tasks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole",
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}

@@ -370,6 +370,18 @@ Create a custom AWS policy called `TerraformStateManagement` with the following 
           ]
         }
 
+### Workspace prep
+
+Each time a new workspace is created, import the existing role and policy objects into Terraform's state table:
+
+        terraform import aws_iam_role.ecsTaskExecutionRole ecsTaskExecutionRole
+        terraform import aws_iam_role_policy_attachment.AmazonECSTaskExecutionRolePolicy ecsTaskExecutionRole/arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        terraform import aws_iam_role.AlpineContainer AlpineContainer
+        terraform import aws_iam_instance_profile.AlpineContainer AlpineContainer
+        terraform import aws_iam_policy.ECSContainerInstance arn:aws:iam::147373596681:policy/ECSContainerInstance
+        terraform import aws_iam_role_policy_attachment.ECSContainerInstance AlpineContainer/arn:aws:iam::147373596681:policy/ECSContainerInstance
+        terraform import aws_iam_role_policy_attachment.AmazonEC2ContainerServiceforEC2Role AlpineContainer/arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+
 ## OS X configuration
 
 Configure the OS X SSH login agent to require a password upon first use of an SSH key, by editing `~/.ssh/config` so that it uses the SSH keychain, adds SSH keys automatically, and sets the default identity file:

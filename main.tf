@@ -16,21 +16,120 @@ provider "aws" {
 
 # ========== DATA SOURCES (looked up by ID) ====================================
 
-data "aws_route53_zone" "public" {
-  name = "${local.vars.public_domain}."
-  private_zone = false
+data "aws_iam_user" "cloudadmin" {
+  user_name        = "cloudadmin"
 }
-data "aws_iam_role" "ecsTaskExecutionRole" { name = "ecsTaskExecutionRole"}
 
+data "aws_iam_group" "cloudadmins" {
+  group_name       = "Cloudadmins"
+}
+
+data "aws_route53_zone" "public" {
+  name             = "${local.vars.public_domain}."
+  private_zone     = false
+}
+
+data "aws_iam_policy" "AmazonEC2ContainerServiceforEC2Role" {
+  arn              = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+}
+
+data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
+  arn              = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
 
 # ========== RESOURCES =========================================================
 
-## --------- Keys---------------------------------------------------------------
+## --------- Roles and policies (shared across workspaces) ---------------------
+
+resource "aws_iam_role" "ecsTaskExecutionRole" {
+  name                  = "ecsTaskExecutionRole"
+  description           = "Allows ECS tasks to call AWS services on your behalf."
+  assume_role_policy    = file("etc/policies/ECSAssumeRole.json")
+  force_detach_policies = false
+  max_session_duration  = 3600
+}
+
+resource "aws_iam_role_policy_attachment" "AmazonECSTaskExecutionRolePolicy" {
+  role                  = aws_iam_role.ecsTaskExecutionRole.name
+  policy_arn            = data.aws_iam_policy.AmazonECSTaskExecutionRolePolicy.arn
+}
+
+resource "aws_iam_role" "AlpineContainer" {
+  name                  = "AlpineContainer"
+  description           = "Allows EC2 instances to run the ECS Agent and CloudWatch Logs Agent."
+  assume_role_policy    = file("etc/policies/EC2AssumeRole.json")
+  force_detach_policies = false
+  max_session_duration  = 3600
+}
+
+resource "aws_iam_instance_profile" "AlpineContainer" {
+  name                  = "AlpineContainer"
+  role                  = "AlpineContainer"
+}
+
+resource "aws_iam_policy" "ECSContainerInstance" {
+  name                  = "ECSContainerInstance"
+  description           = "Allows EC2 instances to create CloudWatch log groups, push logs, and stop ECS tasks."
+  policy                = file("etc/policies/ECSContainerInstance.json")
+}
+
+resource "aws_iam_role_policy_attachment" "ECSContainerInstance" {
+  role                  = aws_iam_role.AlpineContainer.name
+  policy_arn            = aws_iam_policy.ECSContainerInstance.arn
+}
+
+resource "aws_iam_role_policy_attachment" "AmazonEC2ContainerServiceforEC2Role" {
+  role                  = aws_iam_role.AlpineContainer.name
+  policy_arn            = data.aws_iam_policy.AmazonEC2ContainerServiceforEC2Role.arn
+}
+
+## --------- Roles and policies (environment-specific) -------------------------
+
+## --------- Keys and secrets --------------------------------------------------
 
 resource "aws_key_pair" "production" {
   key_name         = local.vars.ec2_ssh_key_name
   public_key       = file("${local.vars.ec2_ssh_key}")
 }
+
+resource "random_password" "django_secret_key" {
+  length           = 32
+  special          = false
+}
+
+resource "random_password" "hyperkitty_api_key" {
+  length           = 32
+  special          = false
+}
+
+resource "random_password" "mailman_rest_password" {
+  length           = 32
+  special          = false
+}
+
+resource "random_password" "postgres_password" {
+  length           = 32
+  special          = false
+}
+
+resource "aws_secretsmanager_secret" "secrets" {
+  name             = terraform.workspace
+  description      = "Secrets for the ${terraform.workspace} environment, managed by Terraform."
+}
+
+locals {
+  secrets = {
+    django_secret_key        = "${random_password.django_secret_key.result}"
+    hyperkitty_api_key       = "${random_password.hyperkitty_api_key.result}"
+    mailman_rest_password    = "${random_password.mailman_rest_password.result}"
+    postgres_password        = "${random_password.postgres_password.result}"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "secrets" {
+  secret_id        = aws_secretsmanager_secret.secrets.id
+  secret_string    = jsonencode(local.secrets)
+}  
 
 ## --------- Virtual Private Cloud (VPC) ---------------------------------------
 
@@ -177,7 +276,7 @@ resource "aws_ecs_task_definition" "hello" {
       },
     ]
   )
-  execution_role_arn         = data.aws_iam_role.ecsTaskExecutionRole.arn
+  execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
   network_mode               = "host"
   memory                     = "256"
   requires_compatibilities   = [ "EC2" ]
@@ -299,7 +398,7 @@ resource "aws_instance" "www" {
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
-  iam_instance_profile = local.vars.ec2_iam_role
+  iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
   vpc_security_group_ids = [aws_security_group.ssh.id,
                       aws_security_group.smtp.id,
                       aws_security_group.https.id]
@@ -334,7 +433,7 @@ resource "aws_instance" "mail" {
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
-  iam_instance_profile = local.vars.ec2_iam_role
+  iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
   vpc_security_group_ids = [aws_security_group.ssh.id,
                       aws_security_group.smtp.id,
                       aws_security_group.https.id]

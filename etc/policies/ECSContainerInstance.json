@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "logs:DescribeLogStreams",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:logs:*:*:*",
+      "Sid": ""
+    },
+    {
+      "Action": [
+        "ecs:ListTasks",
+        "ecs:ListContainerInstances",
+        "ecs:StopTask"
+      ],
+      "Effect": "Allow",
+      "Resource": "*",
+      "Sid": ""
+    }
+  ]
+}

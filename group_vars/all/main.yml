@@ -1,6 +1,5 @@
 ec2_ssh_key_name:  Andy SSH                      # Name for uploaded SSH key
 ec2_ssh_key:       ~/.ssh/id_rsa.pub             # Local path to SSH key
-ec2_iam_role:      AlpineContainer               # Role to attach to EC2 instances
 ec2_instance_type: t2.nano                       # Size of EC2 instance to provision
 ec2_region:        us-east-1                     # Region to deploy AWS environment
 ec2_subnet_1_az:   us-east-1a
