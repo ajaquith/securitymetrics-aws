@@ -9,8 +9,7 @@
         "logs:PutLogEvents"
       ],
       "Effect": "Allow",
-      "Resource": "arn:aws:logs:*:*:*",
-      "Sid": ""
+      "Resource": "arn:aws:logs:*:*:*"
     },
     {
       "Action": [
@@ -19,8 +18,12 @@
         "ecs:StopTask"
       ],
       "Effect": "Allow",
-      "Resource": "*",
-      "Sid": ""
+      "Resource": "*"
+    },
+    {
+      "Action": "ssm:GetParameters",
+      "Effect": "Allow",
+      "Resource": [ "${django.arn}", "${hyperkitty.arn}", "${mailman.arn}", "${postgres.arn}" ]
     }
   ]
 }

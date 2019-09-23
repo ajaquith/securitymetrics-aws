@@ -70,7 +70,7 @@ resource "aws_iam_instance_profile" "AlpineContainer" {
 resource "aws_iam_policy" "ECSContainerInstance" {
   name                  = "ECSContainerInstance"
   description           = "Allows EC2 instances to create CloudWatch log groups, push logs, and stop ECS tasks."
-  policy                = file("etc/policies/ECSContainerInstance.json")
+  policy                = templatefile("etc/policies/ECSContainerInstance.json", { django = aws_ssm_parameter.django, mailman = aws_ssm_parameter.mailman, hyperkitty = aws_ssm_parameter.hyperkitty, postgres = aws_ssm_parameter.postgres })
 }
 
 resource "aws_iam_role_policy_attachment" "ECSContainerInstance" {
@@ -92,44 +92,61 @@ resource "aws_key_pair" "production" {
   public_key       = file("${local.vars.ec2_ssh_key}")
 }
 
-resource "random_password" "django_secret_key" {
-  length           = 32
-  special          = false
-}
-
-resource "random_password" "hyperkitty_api_key" {
-  length           = 32
-  special          = false
-}
-
-resource "random_password" "mailman_rest_password" {
-  length           = 32
-  special          = false
-}
-
-resource "random_password" "postgres_password" {
-  length           = 32
-  special          = false
-}
-
-resource "aws_secretsmanager_secret" "secrets" {
-  name             = terraform.workspace
-  description      = "Secrets for the ${terraform.workspace} environment, managed by Terraform."
-}
-
-locals {
-  secrets = {
-    django_secret_key        = "${random_password.django_secret_key.result}"
-    hyperkitty_api_key       = "${random_password.hyperkitty_api_key.result}"
-    mailman_rest_password    = "${random_password.mailman_rest_password.result}"
-    postgres_password        = "${random_password.postgres_password.result}"
+variable "passwords" {
+  description      = "Random secret passwords and keys for services."
+  default = {
+    django         = "Django secret key."
+    hyperkitty     = "Hyperkitty API key."
+    mailman        = "Mailman REST API password."
+    postgres       = "PostgresQL password."
   }
 }
 
-resource "aws_secretsmanager_secret_version" "secrets" {
-  secret_id        = aws_secretsmanager_secret.secrets.id
-  secret_string    = jsonencode(local.secrets)
-}  
+resource "random_password" "passwords" {
+  count            = length(var.passwords)
+  length           = 32
+  special          = false
+}
+
+resource "aws_ssm_parameter" "django" {
+  name        = "/${terraform.workspace}/django_secret_key"
+  description = "Django secret key"
+  type        = "SecureString"
+  value       = random_password.passwords[0].result
+  tags = {
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_ssm_parameter" "hyperkitty" {
+  name        = "/${terraform.workspace}/hyperkitty_api_key"
+  description = "Hyperkitty secret key"
+  type        = "SecureString"
+  value       = random_password.passwords[1].result
+  tags = {
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_ssm_parameter" "mailman" {
+  name        = "/${terraform.workspace}/mailman_rest_password"
+  description = "Mailman REST interface password"
+  type        = "SecureString"
+  value       = random_password.passwords[2].result
+  tags = {
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_ssm_parameter" "postgres" {
+  name        = "/${terraform.workspace}/postgres_password"
+  description = "PostgresQL database password"
+  type        = "SecureString"
+  value       = random_password.passwords[3].result
+  tags = {
+    Environment    = terraform.workspace
+  }
+}
 
 ## --------- Virtual Private Cloud (VPC) ---------------------------------------
 
