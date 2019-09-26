@@ -120,7 +120,7 @@
     - { name: 'uwsgi_params', dest: '/' }
     - { name: 'mailman.conf', dest: '/conf.d/' }
   notify: Restart nginx
-
+  
 #- name: "Create Docker comtainers"
 #  docker_compose:
 #    project_name: mailman

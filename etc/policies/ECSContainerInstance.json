@@ -19,11 +19,6 @@
       ],
       "Effect": "Allow",
       "Resource": "*"
-    },
-    {
-      "Action": "ssm:GetParameters",
-      "Effect": "Allow",
-      "Resource": [ "${django.arn}", "${hyperkitty.arn}", "${mailman.arn}", "${postgres.arn}" ]
     }
   ]
 }

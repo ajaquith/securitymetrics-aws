@@ -382,6 +382,15 @@ Each time a new workspace is created, import the existing role and policy object
         terraform import aws_iam_role_policy_attachment.ECSContainerInstance AlpineContainer/arn:aws:iam::147373596681:policy/ECSContainerInstance
         terraform import aws_iam_role_policy_attachment.AmazonEC2ContainerServiceforEC2Role AlpineContainer/arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
 
+### Drift metrics
+
+terraform plan out=out
+terraform show -json out > out.json
+jq '.resource_changes[].address' out.json  | wc -l
+jq '.resource_changes[].change | select(.actions[] | contains("update")) | .actions[]' out.json  | wc -l
+
+jq '.planned_values.root_module.resources[].address' out.json
+
 ## OS X configuration
 
 Configure the OS X SSH login agent to require a password upon first use of an SSH key, by editing `~/.ssh/config` so that it uses the SSH keychain, adds SSH keys automatically, and sets the default identity file:

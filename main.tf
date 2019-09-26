@@ -41,24 +41,11 @@ data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
 
 ## --------- Roles and policies (shared across workspaces) ---------------------
 
-resource "aws_iam_role" "ecsTaskExecutionRole" {
-  name                  = "ecsTaskExecutionRole"
-  description           = "Allows ECS tasks to call AWS services on your behalf."
-  assume_role_policy    = file("etc/policies/ECSAssumeRole.json")
-  force_detach_policies = false
-  max_session_duration  = 3600
-}
-
-resource "aws_iam_role_policy_attachment" "AmazonECSTaskExecutionRolePolicy" {
-  role                  = aws_iam_role.ecsTaskExecutionRole.name
-  policy_arn            = data.aws_iam_policy.AmazonECSTaskExecutionRolePolicy.arn
-}
-
 resource "aws_iam_role" "AlpineContainer" {
   name                  = "AlpineContainer"
   description           = "Allows EC2 instances to run the ECS Agent and CloudWatch Logs Agent."
   assume_role_policy    = file("etc/policies/EC2AssumeRole.json")
-  force_detach_policies = false
+  force_detach_policies = true
   max_session_duration  = 3600
 }
 
@@ -70,7 +57,7 @@ resource "aws_iam_instance_profile" "AlpineContainer" {
 resource "aws_iam_policy" "ECSContainerInstance" {
   name                  = "ECSContainerInstance"
   description           = "Allows EC2 instances to create CloudWatch log groups, push logs, and stop ECS tasks."
-  policy                = templatefile("etc/policies/ECSContainerInstance.json", { django = aws_ssm_parameter.django, mailman = aws_ssm_parameter.mailman, hyperkitty = aws_ssm_parameter.hyperkitty, postgres = aws_ssm_parameter.postgres })
+  policy                = file("etc/policies/ECSContainerInstance.json")
 }
 
 resource "aws_iam_role_policy_attachment" "ECSContainerInstance" {
@@ -84,6 +71,33 @@ resource "aws_iam_role_policy_attachment" "AmazonEC2ContainerServiceforEC2Role" 
 }
 
 ## --------- Roles and policies (environment-specific) -------------------------
+
+resource "aws_iam_role" "ecsTaskExecutionRole" {
+  name_prefix           = "${terraform.workspace}-"
+  description           = "Environment ${terraform.workspace}: ECS task execution role."
+  assume_role_policy    = file("etc/policies/ECSAssumeRole.json")
+  force_detach_policies = true
+  max_session_duration  = 3600
+  tags = {
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
+  name_prefix           = "${terraform.workspace}-"
+  description           = "Environment ${terraform.workspace}: local ECS task execution permissions."
+  policy                = templatefile("etc/policies/ECSTaskExecution.json", { django = aws_ssm_parameter.django, mailman = aws_ssm_parameter.mailman, hyperkitty = aws_ssm_parameter.hyperkitty, postgres = aws_ssm_parameter.postgres })
+}
+
+resource "aws_iam_role_policy_attachment" "ecsTaskExecutionPolicy" {
+  role                  = aws_iam_role.ecsTaskExecutionRole.name
+  policy_arn            = aws_iam_policy.ecsTaskExecutionPolicy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "AmazonECSTaskExecutionRolePolicy" {
+  role                  = aws_iam_role.ecsTaskExecutionRole.name
+  policy_arn            = data.aws_iam_policy.AmazonECSTaskExecutionRolePolicy.arn
+}
 
 ## --------- Keys and secrets --------------------------------------------------
 

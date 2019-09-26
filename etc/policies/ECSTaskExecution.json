@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "ssm:GetParameters",
+      "Effect": "Allow",
+      "Resource": [ "${django.arn}", "${hyperkitty.arn}", "${mailman.arn}", "${postgres.arn}" ]
+    }
+  ]
+}
