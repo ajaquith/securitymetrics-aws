@@ -23,19 +23,24 @@ secrets:
 security_groups:
   public:
     ssh:
-      name:        ssh
       ports:       [22]
       description: SSH
     smtp:
-      name:        smtp
       ports:       [25]
       description: SMTP
     https:
-      name:        https
       ports:       [80, 443]
       description: HTTP/S
   private:
     nfs:
-      name:        nfs
       ports:       [2049]
       description: NFS
+    postgres:
+      ports:       [5432]
+      description: PostgresQL
+    mailman-core:
+      ports:       [8000]
+      description: HyperKitty and Postorius REST API
+    mailman-web:
+      ports:       [8001]
+      description: Mailman REST API

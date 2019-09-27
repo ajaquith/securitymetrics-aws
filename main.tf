@@ -328,8 +328,8 @@ resource "aws_instance" "www" {
   instance_type    = local.vars.ec2_instance_type
   iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
-                      aws_security_group.public["smtp"].id,
-                      aws_security_group.public["https"].id]
+                      aws_security_group.public["https"].id,
+                      aws_security_group.private["mailman-web"].id]
   monitoring       = true
   subnet_id        = aws_subnet.subnets["subnet1"].id
   associate_public_ip_address = true
@@ -364,7 +364,8 @@ resource "aws_instance" "mail" {
   iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["smtp"].id,
-                      aws_security_group.public["https"].id]
+                      aws_security_group.private["postgres"].id,
+                      aws_security_group.private["mailman-core"].id]
   monitoring       = true
   subnet_id        = aws_subnet.subnets["subnet2"].id
   associate_public_ip_address = true
