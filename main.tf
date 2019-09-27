@@ -74,19 +74,19 @@ resource "aws_iam_role_policy_attachment" "AmazonEC2ContainerServiceforEC2Role" 
 
 resource "aws_iam_role" "ecsTaskExecutionRole" {
   name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: ECS task execution role."
+  description           = "Environment ${terraform.workspace}: ECS task execution."
   assume_role_policy    = file("etc/policies/ECSAssumeRole.json")
   force_detach_policies = true
   max_session_duration  = 3600
   tags = {
-    Environment    = terraform.workspace
+    Environment         = terraform.workspace
   }
 }
 
 resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
   name_prefix           = "${terraform.workspace}-"
   description           = "Environment ${terraform.workspace}: local ECS task execution permissions."
-  policy                = templatefile("etc/policies/ECSTaskExecution.json", { django = aws_ssm_parameter.django, mailman = aws_ssm_parameter.mailman, hyperkitty = aws_ssm_parameter.hyperkitty, postgres = aws_ssm_parameter.postgres })
+  policy                = templatefile("etc/policies/ECSTaskExecution.json", { secrets = aws_ssm_parameter.secrets })
 }
 
 resource "aws_iam_role_policy_attachment" "ecsTaskExecutionPolicy" {
@@ -106,60 +106,22 @@ resource "aws_key_pair" "production" {
   public_key       = file("${local.vars.ec2_ssh_key}")
 }
 
-variable "passwords" {
-  description      = "Random secret passwords and keys for services."
-  default = {
-    django         = "Django secret key."
-    hyperkitty     = "Hyperkitty API key."
-    mailman        = "Mailman REST API password."
-    postgres       = "PostgresQL password."
+resource "aws_ssm_parameter" "secrets" {
+  for_each         = local.vars.secret_passwords
+  name             = "/${terraform.workspace}/${each.key}"
+  description      = "${each.value.description}"
+  type             = "SecureString"
+  value            = random_password.passwords[each.value.idx].result
+  overwrite        = true
+  tags = {
+    Environment    = terraform.workspace
   }
 }
 
 resource "random_password" "passwords" {
-  count            = length(var.passwords)
+  count            = length(local.vars.secret_passwords)
   length           = 32
   special          = false
-}
-
-resource "aws_ssm_parameter" "django" {
-  name        = "/${terraform.workspace}/django_secret_key"
-  description = "Django secret key"
-  type        = "SecureString"
-  value       = random_password.passwords[0].result
-  tags = {
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_ssm_parameter" "hyperkitty" {
-  name        = "/${terraform.workspace}/hyperkitty_api_key"
-  description = "Hyperkitty secret key"
-  type        = "SecureString"
-  value       = random_password.passwords[1].result
-  tags = {
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_ssm_parameter" "mailman" {
-  name        = "/${terraform.workspace}/mailman_rest_password"
-  description = "Mailman REST interface password"
-  type        = "SecureString"
-  value       = random_password.passwords[2].result
-  tags = {
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_ssm_parameter" "postgres" {
-  name        = "/${terraform.workspace}/postgres_password"
-  description = "PostgresQL database password"
-  type        = "SecureString"
-  value       = random_password.passwords[3].result
-  tags = {
-    Environment    = terraform.workspace
-  }
 }
 
 ## --------- Virtual Private Cloud (VPC) ---------------------------------------
@@ -250,15 +212,17 @@ resource "aws_efs_mount_target" "az2" {
 }
 
 resource "aws_security_group" "nfs" {
-  name             = "nfs"
-  description      = "NFS"
+  name             = local.vars.security_groups.nfs.name
+  description      = local.vars.security_groups.nfs.description
   vpc_id           = aws_vpc.default.id
-  ingress {
-    description    = "NFS subnet"
-    from_port      = 2049
-    to_port        = 2049
-    protocol       = "tcp"
-    cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
+  dynamic "ingress" {
+    for_each       = local.vars.security_groups.nfs.ports
+    content {
+      from_port    = ingress.value
+      to_port      = ingress.value
+      protocol     = "tcp"
+      cidr_blocks  = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
+    }
   }
   egress {
     description    = "Any subnet"
@@ -268,7 +232,7 @@ resource "aws_security_group" "nfs" {
     cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
   }
   tags = {
-    Name           = "nfs"
+    Name           = local.vars.security_groups.nfs.name
     Environment    = terraform.workspace
   }
 }
@@ -344,15 +308,17 @@ resource "aws_ecs_service" "hello" {
 ## --------- Server security groups --------------------------------------------
 
 resource "aws_security_group" "ssh" {
-  name             = "ssh"
-  description      = "SSH"
+  name             = local.vars.security_groups.ssh.name
+  description      = local.vars.security_groups.ssh.description
   vpc_id           = aws_vpc.default.id
-  ingress {
-    description    = "SSH"
-    from_port      = 22
-    to_port        = 22
-    protocol       = "tcp"
-    cidr_blocks    = [local.all_ipv4]
+  dynamic "ingress" {
+    for_each       = local.vars.security_groups.ssh.ports
+    content {
+      from_port    = ingress.value
+      to_port      = ingress.value
+      protocol     = "tcp"
+      cidr_blocks  = [local.all_ipv4]
+    }
   }
   egress {
     description    = "All IPv4"
@@ -362,21 +328,23 @@ resource "aws_security_group" "ssh" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
-    Name           = "ssh"
+    Name           = local.vars.security_groups.ssh.name
     Environment    = terraform.workspace
   }
 }
 
 resource "aws_security_group" "smtp" {
-  name             = "smtp"
-  description      = "SMTP"
+  name             = local.vars.security_groups.smtp.name
+  description      = local.vars.security_groups.smtp.description
   vpc_id           = aws_vpc.default.id
-  ingress {
-    description    = "SMTP"
-    from_port      = 25
-    to_port        = 25
-    protocol       = "tcp"
-    cidr_blocks    = [local.all_ipv4]
+  dynamic "ingress" {
+    for_each       = local.vars.security_groups.smtp.ports
+    content {
+      from_port    = ingress.value
+      to_port      = ingress.value
+      protocol     = "tcp"
+      cidr_blocks  = [local.all_ipv4]
+    }
   }
   egress {
     description    = "All IPv4"
@@ -386,28 +354,23 @@ resource "aws_security_group" "smtp" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
-    Name           = "smtp"
+    Name           = local.vars.security_groups.smtp.name
     Environment    = terraform.workspace
   }
 }
 
 resource "aws_security_group" "https" {
-  name             = "https"
+  name             = local.vars.security_groups.https.name
   description      = "HTTP/S"
   vpc_id           = aws_vpc.default.id
-  ingress {
-    description    = "HTTP"
-    from_port      = 80
-    to_port        = 80
-    protocol       = "tcp"
-    cidr_blocks    = [local.all_ipv4]
-  }
-  ingress {
-    description    = "HTTPS"
-    from_port      = 443
-    to_port        = 443
-    protocol       = "tcp"
-    cidr_blocks    = [local.all_ipv4]
+  dynamic "ingress" {
+    for_each       = local.vars.security_groups.https.ports
+    content {
+      from_port    = ingress.value
+      to_port      = ingress.value
+      protocol     = "tcp"
+      cidr_blocks  = [local.all_ipv4]
+    }
   }
   egress {
     description    = "All IPv4"
@@ -417,7 +380,7 @@ resource "aws_security_group" "https" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
-    Name           = "https"
+    Name           = local.vars.security_groups.https.name
     Environment    = terraform.workspace
   }
 }

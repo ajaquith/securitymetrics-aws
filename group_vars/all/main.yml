@@ -8,3 +8,33 @@ ec2_instance_ami:  ami-039eb499c36219cad         # ID of the AMI used for EC2 in
 ecs_taskexec_role: ecsTaskExecutionRole          # Name of ECS task execution role
 ansible_playbook:  playbook_ec2.yml              # Ansible playbook for provisioning EC2 instances
 import_archive:    no
+secret_passwords:
+  django_secret_key:
+    idx:                     0
+    description:             Django secret key.
+  mailman_rest_password:
+    idx:                     1
+    description:             Mailman REST API password
+  hyperkitty_api_key:
+    idx:                     2
+    description:             Hyperkitty API key.
+  postgres_password:
+    idx:                     3
+    description:             PostgresQL password.
+security_groups:
+  ssh:
+    name: ssh
+    ports: [22]
+    description: SSH
+  smtp:
+    name: smtp
+    ports: [25]
+    description: SMTP
+  https:
+    name: https
+    ports: [80, 443]
+    description: HTTP/S
+  nfs:
+    name: nfs
+    ports: [2049]
+    description: NFS

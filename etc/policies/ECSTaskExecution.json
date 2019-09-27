@@ -4,7 +4,11 @@
     {
       "Action": "ssm:GetParameters",
       "Effect": "Allow",
-      "Resource": [ "${django.arn}", "${hyperkitty.arn}", "${mailman.arn}", "${postgres.arn}" ]
+      "Resource": [
+        %{ for secret in keys(secrets) ~}
+        "${secrets[secret].arn}"%{ if index(keys(secrets), secret) + 1 < length(secrets) }, %{ endif }
+        %{ endfor ~}        
+      ]
     }
   ]
 }
