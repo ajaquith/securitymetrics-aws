@@ -202,39 +202,13 @@ resource "aws_efs_file_system" "nfs" {
 resource "aws_efs_mount_target" "az1" {
   file_system_id   = aws_efs_file_system.nfs.id
   subnet_id        = aws_subnet.az1.id
-  security_groups  = [aws_security_group.nfs.id]
+  security_groups  = [aws_security_group.private["nfs"].id]
 }
 
 resource "aws_efs_mount_target" "az2" {
   file_system_id   = aws_efs_file_system.nfs.id
   subnet_id        = aws_subnet.az2.id
-  security_groups  = [aws_security_group.nfs.id]
-}
-
-resource "aws_security_group" "nfs" {
-  name             = local.vars.security_groups.nfs.name
-  description      = local.vars.security_groups.nfs.description
-  vpc_id           = aws_vpc.default.id
-  dynamic "ingress" {
-    for_each       = local.vars.security_groups.nfs.ports
-    content {
-      from_port    = ingress.value
-      to_port      = ingress.value
-      protocol     = "tcp"
-      cidr_blocks  = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
-    }
-  }
-  egress {
-    description    = "Any subnet"
-    from_port      = 0
-    to_port        = 0
-    protocol       = "-1"
-    cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
-  }
-  tags = {
-    Name           = local.vars.security_groups.nfs.name
-    Environment    = terraform.workspace
-  }
+  security_groups  = [aws_security_group.private["nfs"].id]
 }
 
 ## --------- ECS cluster -------------------------------------------------------
@@ -307,12 +281,13 @@ resource "aws_ecs_service" "hello" {
 
 ## --------- Server security groups --------------------------------------------
 
-resource "aws_security_group" "ssh" {
-  name             = local.vars.security_groups.ssh.name
-  description      = local.vars.security_groups.ssh.description
+resource "aws_security_group" "public" {
+  for_each         = local.vars.security_groups["public"]
+  name             = "${terraform.workspace}-${each.key}-public"
+  description      = each.value.description
   vpc_id           = aws_vpc.default.id
   dynamic "ingress" {
-    for_each       = local.vars.security_groups.ssh.ports
+    for_each       = each.value.ports
     content {
       from_port    = ingress.value
       to_port      = ingress.value
@@ -328,59 +303,34 @@ resource "aws_security_group" "ssh" {
     cidr_blocks    = [local.all_ipv4]
   }
   tags = {
-    Name           = local.vars.security_groups.ssh.name
+    Name           = "${terraform.workspace}-${each.key}-public"
     Environment    = terraform.workspace
   }
 }
 
-resource "aws_security_group" "smtp" {
-  name             = local.vars.security_groups.smtp.name
-  description      = local.vars.security_groups.smtp.description
+resource "aws_security_group" "private" {
+  for_each         = local.vars.security_groups["private"]
+  name             = "${terraform.workspace}-${each.key}-private"
+  description      = each.value.description
   vpc_id           = aws_vpc.default.id
   dynamic "ingress" {
-    for_each       = local.vars.security_groups.smtp.ports
+    for_each       = each.value.ports
     content {
       from_port    = ingress.value
       to_port      = ingress.value
       protocol     = "tcp"
-      cidr_blocks  = [local.all_ipv4]
+      cidr_blocks  = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
     }
   }
   egress {
-    description    = "All IPv4"
+    description    = "Any subnet"
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = [local.all_ipv4]
+    cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
   }
   tags = {
-    Name           = local.vars.security_groups.smtp.name
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_security_group" "https" {
-  name             = local.vars.security_groups.https.name
-  description      = "HTTP/S"
-  vpc_id           = aws_vpc.default.id
-  dynamic "ingress" {
-    for_each       = local.vars.security_groups.https.ports
-    content {
-      from_port    = ingress.value
-      to_port      = ingress.value
-      protocol     = "tcp"
-      cidr_blocks  = [local.all_ipv4]
-    }
-  }
-  egress {
-    description    = "All IPv4"
-    from_port      = 0
-    to_port        = 0
-    protocol       = "-1"
-    cidr_blocks    = [local.all_ipv4]
-  }
-  tags = {
-    Name           = local.vars.security_groups.https.name
+    Name           = "${terraform.workspace}-${each.key}-private"
     Environment    = terraform.workspace
   }
 }
@@ -393,9 +343,9 @@ resource "aws_instance" "www" {
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
   iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
-  vpc_security_group_ids = [aws_security_group.ssh.id,
-                      aws_security_group.smtp.id,
-                      aws_security_group.https.id]
+  vpc_security_group_ids = [aws_security_group.public["ssh"].id,
+                      aws_security_group.public["smtp"].id,
+                      aws_security_group.public["https"].id]
   monitoring       = true
   subnet_id        = aws_subnet.az1.id
   associate_public_ip_address = true
@@ -428,9 +378,9 @@ resource "aws_instance" "mail" {
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
   iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
-  vpc_security_group_ids = [aws_security_group.ssh.id,
-                      aws_security_group.smtp.id,
-                      aws_security_group.https.id]
+  vpc_security_group_ids = [aws_security_group.public["ssh"].id,
+                      aws_security_group.public["smtp"].id,
+                      aws_security_group.public["https"].id]
   monitoring       = true
   subnet_id        = aws_subnet.az2.id
   associate_public_ip_address = true

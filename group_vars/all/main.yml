@@ -18,19 +18,21 @@ secrets:
   postgres_password:
     description:             PostgresQL password.
 security_groups:
-  ssh:
-    name: ssh
-    ports: [22]
-    description: SSH
-  smtp:
-    name: smtp
-    ports: [25]
-    description: SMTP
-  https:
-    name: https
-    ports: [80, 443]
-    description: HTTP/S
-  nfs:
-    name: nfs
-    ports: [2049]
-    description: NFS
+  public:
+    ssh:
+      name: ssh
+      ports: [22]
+      description: SSH
+    smtp:
+      name: smtp
+      ports: [25]
+      description: SMTP
+    https:
+      name: https
+      ports: [80, 443]
+      description: HTTP/S
+  private:
+    nfs:
+      name: nfs
+      ports: [2049]
+      description: NFS
