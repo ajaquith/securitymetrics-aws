@@ -2,37 +2,40 @@ ec2_ssh_key_name:  Andy SSH                      # Name for uploaded SSH key
 ec2_ssh_key:       ~/.ssh/id_rsa.pub             # Local path to SSH key
 ec2_instance_type: t2.nano                       # Size of EC2 instance to provision
 ec2_region:        us-east-1                     # Region to deploy AWS environment
-ec2_subnet_1_az:   us-east-1a
-ec2_subnet_2_az:   us-east-1b
 ec2_instance_ami:  ami-039eb499c36219cad         # ID of the AMI used for EC2 instances
-ecs_taskexec_role: ecsTaskExecutionRole          # Name of ECS task execution role
 ansible_playbook:  playbook_ec2.yml              # Ansible playbook for provisioning EC2 instances
 import_archive:    no
+
+# Terraform auto-generates randomized secrets for each item in the secrets: map
 secrets:
   django_secret_key:
-    description:             Django secret key.
+    description:   Django secret key.
   mailman_rest_password:
-    description:             Mailman REST API password
+    description:   Mailman REST API password
   hyperkitty_api_key:
-    description:             Hyperkitty API key.
+    description:   Hyperkitty API key.
   postgres_password:
-    description:             PostgresQL password.
+    description:   PostgresQL password.
+
+# Terraform auto-generates security groups for each item in the security_groups: map.
+# 'public' groups are globally routable. 'private' groups route just within VPC
+# private subnets.
 security_groups:
   public:
     ssh:
-      name: ssh
-      ports: [22]
+      name:        ssh
+      ports:       [22]
       description: SSH
     smtp:
-      name: smtp
-      ports: [25]
+      name:        smtp
+      ports:       [25]
       description: SMTP
     https:
-      name: https
-      ports: [80, 443]
+      name:        https
+      ports:       [80, 443]
       description: HTTP/S
   private:
     nfs:
-      name: nfs
-      ports: [2049]
+      name:        nfs
+      ports:       [2049]
       description: NFS

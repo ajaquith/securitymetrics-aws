@@ -2,3 +2,13 @@ ec2_vpc_cidr:      172.30.0.0/16
 ec2_subnet_1_cidr: 172.30.16.0/20
 ec2_subnet_2_cidr: 172.30.32.0/20
 public_domain:     markerbench.com
+
+# Terraform auto-generates these subnets. The cidr_blocks must be globally
+# unique within the account.
+subnets:
+  subnet1:
+    availability_zone: us-east-1a
+    cidr_block:    172.30.16.0/20
+  subnet2:
+    availability_zone: us-east-1b
+    cidr_block:    172.30.32.0/20

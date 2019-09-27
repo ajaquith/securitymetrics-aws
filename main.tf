@@ -148,26 +148,15 @@ resource "aws_vpc" "default" {
   }
 }
 
-resource "aws_subnet" "az1" {
-  availability_zone                    = local.vars.ec2_subnet_1_az
-  cidr_block                           = local.vars.ec2_subnet_1_cidr
-  map_public_ip_on_launch              = true
+resource "aws_subnet" "subnets" {
+  for_each = local.vars.subnets
+  availability_zone                    = each.value.availability_zone
+  cidr_block                           = each.value.cidr_block
+  map_public_ip_on_launch              = false
   assign_ipv6_address_on_creation      = false
   vpc_id                               = aws_vpc.default.id
   tags = {
-    Name                               = local.vars.ec2_subnet_1_az
-    Environment                        = terraform.workspace
-  }
-}
-
-resource "aws_subnet" "az2" {
-  availability_zone                    = local.vars.ec2_subnet_2_az
-  cidr_block                           = local.vars.ec2_subnet_2_cidr
-  map_public_ip_on_launch              = true
-  assign_ipv6_address_on_creation      = false
-  vpc_id                               = aws_vpc.default.id
-  tags = {
-    Name                               = local.vars.ec2_subnet_2_az
+    Name                               = "${terraform.workspace}-${each.key}"
     Environment                        = terraform.workspace
   }
 }
@@ -184,7 +173,7 @@ resource "aws_route53_zone" "private" {
     vpc_id         = aws_vpc.default.id
   }
   tags = {
-    Name           = "zone"
+    Name           = "${terraform.workspace}-private"
     Environment    = terraform.workspace
   }
 }
@@ -194,20 +183,15 @@ resource "aws_route53_zone" "private" {
 resource "aws_efs_file_system" "nfs" {
   creation_token   = "nfs"
   tags = {
-    Name           = "nfs"
+    Name           = "${terraform.workspace}-nfs"
     Environment    = terraform.workspace
   }
 }
 
-resource "aws_efs_mount_target" "az1" {
+resource "aws_efs_mount_target" "nfs" {
+  for_each = aws_subnet.subnets
   file_system_id   = aws_efs_file_system.nfs.id
-  subnet_id        = aws_subnet.az1.id
-  security_groups  = [aws_security_group.private["nfs"].id]
-}
-
-resource "aws_efs_mount_target" "az2" {
-  file_system_id   = aws_efs_file_system.nfs.id
-  subnet_id        = aws_subnet.az2.id
+  subnet_id        = each.value.id
   security_groups  = [aws_security_group.private["nfs"].id]
 }
 
@@ -319,7 +303,7 @@ resource "aws_security_group" "private" {
       from_port    = ingress.value
       to_port      = ingress.value
       protocol     = "tcp"
-      cidr_blocks  = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
+      cidr_blocks  = values(aws_subnet.subnets)[*].cidr_block
     }
   }
   egress {
@@ -327,7 +311,7 @@ resource "aws_security_group" "private" {
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = [aws_subnet.az1.cidr_block, aws_subnet.az2.cidr_block]
+    cidr_blocks    = values(aws_subnet.subnets)[*].cidr_block
   }
   tags = {
     Name           = "${terraform.workspace}-${each.key}-private"
@@ -338,7 +322,7 @@ resource "aws_security_group" "private" {
 ## --------- Servers -----------------------------------------------------------
 
 resource "aws_instance" "www" {
-  depends_on       = [aws_efs_mount_target.az1, aws_efs_mount_target.az2, aws_route.internet]
+  depends_on       = [aws_efs_mount_target.nfs, aws_route.internet]
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
@@ -347,16 +331,16 @@ resource "aws_instance" "www" {
                       aws_security_group.public["smtp"].id,
                       aws_security_group.public["https"].id]
   monitoring       = true
-  subnet_id        = aws_subnet.az1.id
+  subnet_id        = aws_subnet.subnets["subnet1"].id
   associate_public_ip_address = true
   tags = {
-    Name           = "www"
+    Name           = "${terraform.workspace}-www"
     Environment    = terraform.workspace
     Role           = "www"
     EfsVolume      = aws_efs_file_system.nfs.id
   }
   volume_tags = {
-    Name           = "www"
+    Name           = "${terraform.workspace}-www"
     Environment    = terraform.workspace
     Role           = "www"
   }
@@ -382,16 +366,16 @@ resource "aws_instance" "mail" {
                       aws_security_group.public["smtp"].id,
                       aws_security_group.public["https"].id]
   monitoring       = true
-  subnet_id        = aws_subnet.az2.id
+  subnet_id        = aws_subnet.subnets["subnet2"].id
   associate_public_ip_address = true
   tags = {
-    Name           = "mail"
+    Name           = "${terraform.workspace}-mail"
     Environment    = terraform.workspace
     Role           = "mail"
     EfsVolume      = aws_efs_file_system.nfs.id
   }
   volume_tags = {
-    Name           = "mail"
+    Name           = "${terraform.workspace}-mail"
     Environment    = terraform.workspace
     Role           = "mail"
   }
