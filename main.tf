@@ -39,6 +39,116 @@ data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
 
 # ========== RESOURCES =========================================================
 
+## --------- Virtual Private Cloud (VPC) ---------------------------------------
+
+resource "aws_internet_gateway" "default" {
+  vpc_id           = aws_vpc.default.id
+  tags = {
+    Name           = terraform.workspace
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_vpc" "default" {
+  cidr_block                           = local.vars.ec2_vpc_cidr
+  instance_tenancy                     = "default"
+  enable_dns_support                   = true
+  enable_dns_hostnames                 = true
+  enable_classiclink                   = false
+  enable_classiclink_dns_support       = false
+  assign_generated_ipv6_cidr_block     = false
+  tags = {
+    Name           = terraform.workspace
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_subnet" "subnets" {
+  for_each = local.vars.subnets
+  availability_zone                    = each.value.availability_zone
+  cidr_block                           = each.value.cidr_block
+  map_public_ip_on_launch              = false
+  assign_ipv6_address_on_creation      = false
+  vpc_id                               = aws_vpc.default.id
+  tags = {
+    Name                               = "${terraform.workspace}-${each.key}"
+    Environment                        = terraform.workspace
+  }
+}
+
+resource "aws_route" "internet" {
+  route_table_id             = aws_vpc.default.default_route_table_id
+  destination_cidr_block     = local.all_ipv4
+  gateway_id                 = aws_internet_gateway.default.id
+}
+
+resource "aws_route53_zone" "private" {
+  name             = local.private_zone
+  vpc {
+    vpc_id         = aws_vpc.default.id
+  }
+  tags = {
+    Name           = "${terraform.workspace}-private"
+    Environment    = terraform.workspace
+  }
+}
+
+## --------- Security groups ---------------------------------------------------
+
+resource "aws_security_group" "public" {
+  for_each         = local.vars.security_groups["public"]
+  name             = "${terraform.workspace}-${each.key}-public"
+  description      = each.value.description
+  vpc_id           = aws_vpc.default.id
+  dynamic "ingress" {
+    for_each       = each.value.ports
+    content {
+      from_port    = ingress.value
+      to_port      = ingress.value
+      protocol     = "tcp"
+      cidr_blocks  = [local.all_ipv4]
+    }
+  }
+  egress {
+    description    = "All IPv4"
+    from_port      = 0
+    to_port        = 0
+    protocol       = "-1"
+    cidr_blocks    = [local.all_ipv4]
+  }
+  tags = {
+    Name           = "${terraform.workspace}-${each.key}-public"
+    Environment    = terraform.workspace
+  }
+}
+
+resource "aws_security_group" "private" {
+  for_each         = local.vars.security_groups["private"]
+  name             = "${terraform.workspace}-${each.key}-private"
+  description      = each.value.description
+  vpc_id           = aws_vpc.default.id
+  dynamic "ingress" {
+    for_each       = each.value.ports
+    content {
+      from_port    = ingress.value
+      to_port      = ingress.value
+      protocol     = "tcp"
+      cidr_blocks  = values(aws_subnet.subnets)[*].cidr_block
+    }
+  }
+  egress {
+    description    = "Any subnet"
+    from_port      = 0
+    to_port        = 0
+    protocol       = "-1"
+    cidr_blocks    = values(aws_subnet.subnets)[*].cidr_block
+  }
+  tags = {
+    Name           = "${terraform.workspace}-${each.key}-private"
+    Environment    = terraform.workspace
+  }
+}
+
 ## --------- Roles and policies (shared across workspaces) ---------------------
 
 resource "aws_iam_role" "AlpineContainer" {
@@ -106,6 +216,14 @@ resource "aws_key_pair" "production" {
   public_key       = file("${local.vars.ec2_ssh_key}")
 }
 
+# Generate n random passwords for each item in the 'secrets' map.
+resource "random_password" "passwords" {
+  count            = length(local.vars.secrets)
+  length           = local.vars.secrets_length
+  special          = false
+}
+
+# Slightly convoluted: create SSM encrypted parameters for n secrets
 resource "aws_ssm_parameter" "secrets" {
   for_each         = toset(keys(local.vars.secrets))
   name             = "/${terraform.workspace}/${each.value}"
@@ -114,66 +232,6 @@ resource "aws_ssm_parameter" "secrets" {
   value            = random_password.passwords[index(keys(local.vars.secrets), each.value)].result
   overwrite        = true
   tags = {
-    Environment    = terraform.workspace
-  }
-}
-
-resource "random_password" "passwords" {
-  count            = length(local.vars.secrets)
-  length           = 32
-  special          = false
-}
-
-## --------- Virtual Private Cloud (VPC) ---------------------------------------
-
-resource "aws_internet_gateway" "default" {
-  vpc_id           = aws_vpc.default.id
-  tags = {
-    Name           = terraform.workspace
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_vpc" "default" {
-  cidr_block                           = local.vars.ec2_vpc_cidr
-  instance_tenancy                     = "default"
-  enable_dns_support                   = true
-  enable_dns_hostnames                 = true
-  enable_classiclink                   = false
-  enable_classiclink_dns_support       = false
-  assign_generated_ipv6_cidr_block     = false
-  tags = {
-    Name           = terraform.workspace
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_subnet" "subnets" {
-  for_each = local.vars.subnets
-  availability_zone                    = each.value.availability_zone
-  cidr_block                           = each.value.cidr_block
-  map_public_ip_on_launch              = false
-  assign_ipv6_address_on_creation      = false
-  vpc_id                               = aws_vpc.default.id
-  tags = {
-    Name                               = "${terraform.workspace}-${each.key}"
-    Environment                        = terraform.workspace
-  }
-}
-
-resource "aws_route" "internet" {
-  route_table_id             = aws_vpc.default.default_route_table_id
-  destination_cidr_block     = local.all_ipv4
-  gateway_id                 = aws_internet_gateway.default.id
-}
-
-resource "aws_route53_zone" "private" {
-  name             = local.private_zone
-  vpc {
-    vpc_id         = aws_vpc.default.id
-  }
-  tags = {
-    Name           = "${terraform.workspace}-private"
     Environment    = terraform.workspace
   }
 }
@@ -263,63 +321,7 @@ resource "aws_ecs_service" "hello" {
   }
 }
 
-## --------- Server security groups --------------------------------------------
-
-resource "aws_security_group" "public" {
-  for_each         = local.vars.security_groups["public"]
-  name             = "${terraform.workspace}-${each.key}-public"
-  description      = each.value.description
-  vpc_id           = aws_vpc.default.id
-  dynamic "ingress" {
-    for_each       = each.value.ports
-    content {
-      from_port    = ingress.value
-      to_port      = ingress.value
-      protocol     = "tcp"
-      cidr_blocks  = [local.all_ipv4]
-    }
-  }
-  egress {
-    description    = "All IPv4"
-    from_port      = 0
-    to_port        = 0
-    protocol       = "-1"
-    cidr_blocks    = [local.all_ipv4]
-  }
-  tags = {
-    Name           = "${terraform.workspace}-${each.key}-public"
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_security_group" "private" {
-  for_each         = local.vars.security_groups["private"]
-  name             = "${terraform.workspace}-${each.key}-private"
-  description      = each.value.description
-  vpc_id           = aws_vpc.default.id
-  dynamic "ingress" {
-    for_each       = each.value.ports
-    content {
-      from_port    = ingress.value
-      to_port      = ingress.value
-      protocol     = "tcp"
-      cidr_blocks  = values(aws_subnet.subnets)[*].cidr_block
-    }
-  }
-  egress {
-    description    = "Any subnet"
-    from_port      = 0
-    to_port        = 0
-    protocol       = "-1"
-    cidr_blocks    = values(aws_subnet.subnets)[*].cidr_block
-  }
-  tags = {
-    Name           = "${terraform.workspace}-${each.key}-private"
-    Environment    = terraform.workspace
-  }
-}
-
-## --------- Servers -----------------------------------------------------------
+## --------- Instances ---------------------------------------------------------
 
 resource "aws_instance" "www" {
   depends_on       = [aws_efs_mount_target.nfs, aws_route.internet]
