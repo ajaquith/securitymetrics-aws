@@ -107,11 +107,11 @@ resource "aws_key_pair" "production" {
 }
 
 resource "aws_ssm_parameter" "secrets" {
-  for_each         = local.vars.secret_passwords
-  name             = "/${terraform.workspace}/${each.key}"
-  description      = "${each.value.description}"
+  for_each         = toset(keys(local.vars.secrets))
+  name             = "/${terraform.workspace}/${each.value}"
+  description      = "${local.vars.secrets[each.value].description}"
   type             = "SecureString"
-  value            = random_password.passwords[each.value.idx].result
+  value            = random_password.passwords[index(keys(local.vars.secrets), each.value)].result
   overwrite        = true
   tags = {
     Environment    = terraform.workspace
@@ -119,7 +119,7 @@ resource "aws_ssm_parameter" "secrets" {
 }
 
 resource "random_password" "passwords" {
-  count            = length(local.vars.secret_passwords)
+  count            = length(local.vars.secrets)
   length           = 32
   special          = false
 }
