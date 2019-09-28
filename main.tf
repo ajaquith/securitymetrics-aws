@@ -44,7 +44,7 @@ data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
 resource "aws_internet_gateway" "default" {
   vpc_id           = aws_vpc.default.id
   tags = {
-    Name           = terraform.workspace
+    Name           = "${terraform.workspace}-internet"
     Environment    = terraform.workspace
   }
 }
@@ -58,7 +58,7 @@ resource "aws_vpc" "default" {
   enable_classiclink_dns_support       = false
   assign_generated_ipv6_cidr_block     = false
   tags = {
-    Name           = terraform.workspace
+    Name           = "${terraform.workspace}-vpc"
     Environment    = terraform.workspace
   }
 }
@@ -149,38 +149,36 @@ resource "aws_security_group" "private" {
   }
 }
 
-## --------- Roles and policies (shared across workspaces) ---------------------
+## --------- Roles and policies ------------------------------------------------
 
-resource "aws_iam_role" "AlpineContainer" {
-  name                  = "AlpineContainer"
-  description           = "Allows EC2 instances to run the ECS Agent and CloudWatch Logs Agent."
+resource "aws_iam_role" "EC2Instance" {
+  name_prefix           = "${terraform.workspace}-"
+  description           = "Environment ${terraform.workspace}: EC2 role for ECS and CloudWatch."
   assume_role_policy    = file("etc/policies/EC2AssumeRole.json")
   force_detach_policies = true
   max_session_duration  = 3600
 }
 
-resource "aws_iam_instance_profile" "AlpineContainer" {
-  name                  = "AlpineContainer"
-  role                  = "AlpineContainer"
-}
-
-resource "aws_iam_policy" "ECSContainerInstance" {
-  name                  = "ECSContainerInstance"
-  description           = "Allows EC2 instances to create CloudWatch log groups, push logs, and stop ECS tasks."
-  policy                = file("etc/policies/ECSContainerInstance.json")
+resource "aws_iam_instance_profile" "EC2Instance" {
+  name_prefix           = "${terraform.workspace}-"
+  role                  = aws_iam_role.EC2Instance.name
 }
 
 resource "aws_iam_role_policy_attachment" "ECSContainerInstance" {
-  role                  = aws_iam_role.AlpineContainer.name
+  role                  = aws_iam_role.EC2Instance.name
   policy_arn            = aws_iam_policy.ECSContainerInstance.arn
 }
 
 resource "aws_iam_role_policy_attachment" "AmazonEC2ContainerServiceforEC2Role" {
-  role                  = aws_iam_role.AlpineContainer.name
+  role                  = aws_iam_role.EC2Instance.name
   policy_arn            = data.aws_iam_policy.AmazonEC2ContainerServiceforEC2Role.arn
 }
 
-## --------- Roles and policies (environment-specific) -------------------------
+resource "aws_iam_policy" "ECSContainerInstance" {
+  name_prefix           = "${terraform.workspace}-"
+  description           = "Environment ${terraform.workspace}: EC2 policy for ECS and CloudWatch."
+  policy                = file("etc/policies/ECSContainerInstance.json")
+}
 
 resource "aws_iam_role" "ecsTaskExecutionRole" {
   name_prefix           = "${terraform.workspace}-"
@@ -195,7 +193,7 @@ resource "aws_iam_role" "ecsTaskExecutionRole" {
 
 resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
   name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: local ECS task execution permissions."
+  description           = "Environment ${terraform.workspace}: ECS task execution permissions."
   policy                = templatefile("etc/policies/ECSTaskExecution.json", { secrets = aws_ssm_parameter.secrets })
 }
 
@@ -232,6 +230,7 @@ resource "aws_ssm_parameter" "secrets" {
   value            = random_password.passwords[index(keys(local.vars.secrets), each.value)].result
   overwrite        = true
   tags = {
+    Name           = "${terraform.workspace}-${each.value}"
     Environment    = terraform.workspace
   }
 }
@@ -328,7 +327,7 @@ resource "aws_instance" "www" {
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
-  iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
+  iam_instance_profile = aws_iam_instance_profile.EC2Instance.name
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["https"].id,
                       aws_security_group.private["mailman-web"].id]
@@ -363,7 +362,7 @@ resource "aws_instance" "mail" {
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
-  iam_instance_profile = aws_iam_instance_profile.AlpineContainer.name
+  iam_instance_profile = aws_iam_instance_profile.EC2Instance.name
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["smtp"].id,
                       aws_security_group.private["postgres"].id,
