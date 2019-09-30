@@ -358,7 +358,7 @@ resource "aws_route53_record" "www" {
 }
 
 resource "aws_instance" "mail" {
-  depends_on       = [aws_instance.www]
+  depends_on       = [aws_efs_mount_target.nfs, aws_route.internet]
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
@@ -382,14 +382,6 @@ resource "aws_instance" "mail" {
     Role           = "mail"
   }
   user_data        = file("roles/base/templates/ec2_init.sh")
-  provisioner "local-exec" {
-    command        = <<-EOT
-        wait 30; \
-        ansible-playbook \
-            --ssh-extra-args='-o StrictHostKeyChecking=no' \
-            ${local.vars.ansible_playbook}
-        EOT
-  }
 }
 
 resource "aws_route53_record" "mail" {
@@ -399,4 +391,20 @@ resource "aws_route53_record" "mail" {
   ttl              = "300"
   records          = [aws_instance.mail.private_ip]
   allow_overwrite  = true
+}
+
+resource "null_resource" "instances" {
+  # Changes to any instance of the cluster requires re-provisioning
+  triggers = {
+    instance_ids = "${join(",", aws_instance.www.*.id, aws_instance.mail.*.id)}"
+  }
+
+  provisioner "local-exec" {
+    command        = <<-EOT
+        wait 30; \
+        ansible-playbook \
+            --ssh-extra-args='-o StrictHostKeyChecking=no' \
+            ${local.vars.ansible_playbook}
+        EOT
+  }
 }
