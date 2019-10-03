@@ -8,9 +8,6 @@ postfix_init: /opt/postfix/init
 postfix_log: /opt/postfix/log
 postfix_data: /opt/postfix/data
 postgres_home: /opt/postgres
-postgres_data: /opt/postgres/data
-postgres_user: postgres
-postgres_db: mailmandb
 
 # Accounts
 mailman_admin: mailman

@@ -83,12 +83,12 @@ resource "aws_route" "internet" {
 }
 
 resource "aws_route53_zone" "private" {
-  name             = local.private_zone
+  name             = "${terraform.workspace}.${local.private_zone}"
   vpc {
     vpc_id         = aws_vpc.default.id
   }
   tags = {
-    Name           = "${terraform.workspace}-private"
+    Name           = "${terraform.workspace}.${local.private_zone}"
     Environment    = terraform.workspace
   }
 }
@@ -254,7 +254,7 @@ resource "aws_efs_mount_target" "nfs" {
 
 ## --------- ECS cluster -------------------------------------------------------
 
-resource "aws_ecs_cluster" "hello" {
+resource "aws_ecs_cluster" "ecs" {
   name = "${terraform.workspace}"
   tags = {
     Name         = "ecs"
@@ -262,61 +262,45 @@ resource "aws_ecs_cluster" "hello" {
   }
 }
 
-resource "aws_ecs_task_definition" "hello" {
-  family                     = "nginx-hello"
-  container_definitions      = jsonencode(
-    [
-      {
-        cpu                  = 0
-        environment          = []
-        essential            = true
-        hostname             = "nginx-hello.private"
-        image                = "nginxdemos/hello"
-        memoryReservation    = 256
-        mountPoints          = []
-        name                 = "nginx-hello"
-        portMappings         = [
-          {
-            hostPort         = 80
-            containerPort    = 80
-            protocol         = "tcp"
-          },
-        ]
-        volumesFrom          = []
-      },
-    ]
-  )
+resource "aws_ecs_task_definition" "postgres" {
+  family                     = "postgres"
+  container_definitions      = templatefile("etc/tasks/postgres.json",
+                                            merge(local.vars, { secrets: aws_ssm_parameter.secrets }))
   execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
   network_mode               = "host"
   memory                     = "256"
-  requires_compatibilities   = [ "EC2" ]
-  placement_constraints {
-    type           = "memberOf"
-    expression     = "attribute:Role == 'www'"
+  volume {
+    name                     = "postgres_data"
+    host_path                = local.vars.postgres_data
   }
+  requires_compatibilities   = [ "EC2" ]
   tags = {
-    Name                     = "nginx-hello-task"
+    Name                     = "${terraform.workspace}-postgres"
     Environment              = terraform.workspace
   }
 }
 
-resource "aws_ecs_service" "hello" {
-  name             = "hello"
-  cluster          = aws_ecs_cluster.hello.arn
-  task_definition  = aws_ecs_task_definition.hello.arn
-  launch_type      = "EC2"
-  scheduling_strategy = "REPLICA"
-  desired_count    = 1
+resource "aws_ecs_service" "postgres" {
+  name                       = "postgres"
+  task_definition            = aws_ecs_task_definition.postgres.arn
+  launch_type                = "EC2"
+  scheduling_strategy        = "REPLICA"
+  desired_count              = 1
+  cluster                    = aws_ecs_cluster.ecs.arn
   ordered_placement_strategy {
-    type           = "binpack"
-    field          = "memory"
+    type                     = "binpack"
+    field                    = "memory"
+  }
+  placement_constraints {
+    type                     = "memberOf"
+    expression               = "attribute:Role == 'mail'"
   }
   lifecycle {
-    ignore_changes = ["desired_count"]
+    ignore_changes           = ["desired_count"]
   }
   tags = {
-    Name           = "nginx-hello-service"
-    Environment    = terraform.workspace
+    Name                     = "${terraform.workspace}-postgres"
+    Environment              = terraform.workspace
   }
 }
 
@@ -350,7 +334,7 @@ resource "aws_instance" "www" {
 
 resource "aws_route53_record" "www" {
   zone_id          = aws_route53_zone.private.zone_id
-  name             = "www.${local.private_zone}"
+  name             = "www.${terraform.workspace}.${local.private_zone}"
   type             = "A"
   ttl              = "300"
   records          = [aws_instance.www.private_ip]
@@ -386,7 +370,7 @@ resource "aws_instance" "mail" {
 
 resource "aws_route53_record" "mail" {
   zone_id          = aws_route53_zone.private.zone_id
-  name             = "mail.${local.private_zone}"
+  name             = "mail.${terraform.workspace}.${local.private_zone}"
   type             = "A"
   ttl              = "300"
   records          = [aws_instance.mail.private_ip]

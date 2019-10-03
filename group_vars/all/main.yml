@@ -7,6 +7,11 @@ ansible_playbook:  playbook_ec2.yml              # Ansible playbook for provisio
 import_archive:    no
 secrets_length:    32                            # Number of randomly generated chars in each secret
 
+# Variables shared with Ansible
+postgres_data:     /opt/postgres/data
+postgres_user:     postgres
+postgres_db:       mailmandb
+
 # Terraform auto-generates randomized secrets for each item in the secrets: map
 secrets:
   django_secret_key:
