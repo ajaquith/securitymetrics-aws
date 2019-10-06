@@ -53,7 +53,7 @@ resource "aws_vpc" "default" {
   cidr_block                           = local.vars.ec2_vpc_cidr
   instance_tenancy                     = "default"
   enable_dns_support                   = true
-  enable_dns_hostnames                 = true
+  enable_dns_hostnames                 = false
   enable_classiclink                   = false
   enable_classiclink_dns_support       = false
   assign_generated_ipv6_cidr_block     = false
@@ -83,14 +83,27 @@ resource "aws_route" "internet" {
 }
 
 resource "aws_route53_zone" "private" {
-  name             = "${terraform.workspace}.${local.private_zone}"
+  name             = local.private_zone
   vpc {
     vpc_id         = aws_vpc.default.id
   }
   tags = {
-    Name           = "${terraform.workspace}.${local.private_zone}"
+    Name           = local.private_zone
     Environment    = terraform.workspace
   }
+}
+
+resource "aws_route53_record" "private" {
+  for_each         = { mailman-web:  aws_instance.www.private_ip,
+                       mailman-core: aws_instance.mail.private_ip,
+                       postfix:      aws_instance.mail.private_ip,
+                       postgres:     aws_instance.mail.private_ip }
+  zone_id          = aws_route53_zone.private.zone_id
+  name             = "${each.key}.${local.private_zone}"
+  type             = "A"
+  ttl              = "300"
+  records          = [each.value]
+  allow_overwrite  = true
 }
 
 ## --------- Security groups ---------------------------------------------------
@@ -235,6 +248,22 @@ resource "aws_ssm_parameter" "secrets" {
   }
 }
 
+resource "aws_ssm_parameter" "postgres_url" {
+  name             = "/${terraform.workspace}/postgres_url"
+  description      = "Database URL for Mailman."
+  type             = "SecureString"
+  value            = format("postgres://%s:%s@postgres.%s/%s",
+                            local.vars.postgres_user,
+                            aws_ssm_parameter.secrets["postgres_password"].value,
+                            local.private_zone,
+                            local.vars.postgres_db)
+  overwrite        = true
+  tags = {
+    Name           = "${terraform.workspace}-postgres_url"
+    Environment    = terraform.workspace
+  }
+}
+
 ## --------- NFS shared storage ------------------------------------------------
 
 resource "aws_efs_file_system" "nfs" {
@@ -304,6 +333,26 @@ resource "aws_ecs_service" "postgres" {
   }
 }
 
+#resource "aws_ecs_task_definition" "mailman-core" {
+#  family                     = "mailman-core"
+#  container_definitions      = templatefile("etc/tasks/mailman-core.json",
+#                                            merge(local.vars,
+                                                   { secrets: aws_ssm_parameter.secrets,
+                                                     }))
+#  execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
+#  network_mode               = "host"
+#  memory                     = "256"
+#  volume {
+#    name                     = "mailman_core"
+#    host_path                = local.vars.mailman_core
+#  }
+#  requires_compatibilities   = [ "EC2" ]
+#  tags = {
+#    Name                     = "${terraform.workspace}-postgres"
+#    Environment              = terraform.workspace
+#  }
+#}
+
 ## --------- Instances ---------------------------------------------------------
 
 resource "aws_instance" "www" {
@@ -332,15 +381,6 @@ resource "aws_instance" "www" {
   user_data        = file("roles/base/templates/ec2_init.sh")
 }
 
-resource "aws_route53_record" "www" {
-  zone_id          = aws_route53_zone.private.zone_id
-  name             = "www.${terraform.workspace}.${local.private_zone}"
-  type             = "A"
-  ttl              = "300"
-  records          = [aws_instance.www.private_ip]
-  allow_overwrite  = true
-}
-
 resource "aws_instance" "mail" {
   depends_on       = [aws_efs_mount_target.nfs, aws_route.internet]
   key_name         = local.vars.ec2_ssh_key_name
@@ -366,15 +406,6 @@ resource "aws_instance" "mail" {
     Role           = "mail"
   }
   user_data        = file("roles/base/templates/ec2_init.sh")
-}
-
-resource "aws_route53_record" "mail" {
-  zone_id          = aws_route53_zone.private.zone_id
-  name             = "mail.${terraform.workspace}.${local.private_zone}"
-  type             = "A"
-  ttl              = "300"
-  records          = [aws_instance.mail.private_ip]
-  allow_overwrite  = true
 }
 
 resource "null_resource" "instances" {

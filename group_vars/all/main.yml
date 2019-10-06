@@ -11,6 +11,7 @@ secrets_length:    32                            # Number of randomly generated 
 postgres_data:     /opt/postgres/data
 postgres_user:     postgres
 postgres_db:       mailmandb
+mailman_core:      /opt/mailman/core
 
 # Terraform auto-generates randomized secrets for each item in the secrets: map
 secrets:

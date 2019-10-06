@@ -3,7 +3,7 @@
 # Define defaults, then merge per-environment variables as described in https://github.com/hashicorp/terraform/issues/15966
 locals {
   all_ipv4                   = "0.0.0.0/0"
-  private_zone               = "local"
+  private_zone               = "${terraform.workspace}.local"
   default_file               = "./group_vars/all/main.yml"
   default_content            = fileexists(local.default_file) ? file(local.default_file) : "NoSettingsFileFound: true"
   default_vars               = yamldecode(local.default_content)
