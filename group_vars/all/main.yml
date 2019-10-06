@@ -9,9 +9,11 @@ secrets_length:    32                            # Number of randomly generated 
 
 # Variables shared with Ansible
 postgres_data:     /opt/postgres/data
+mailman_core:      /opt/mailman/core
+mailman_admin:     mailman
+mailman_rest_user: restadmin
 postgres_user:     postgres
 postgres_db:       mailmandb
-mailman_core:      /opt/mailman/core
 
 # Terraform auto-generates randomized secrets for each item in the secrets: map
 secrets:

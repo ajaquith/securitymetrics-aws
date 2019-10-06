@@ -78,17 +78,17 @@ resource "aws_subnet" "subnets" {
 
 resource "aws_route" "internet" {
   route_table_id             = aws_vpc.default.default_route_table_id
-  destination_cidr_block     = local.all_ipv4
+  destination_cidr_block     = local.vars.all_ipv4
   gateway_id                 = aws_internet_gateway.default.id
 }
 
 resource "aws_route53_zone" "private" {
-  name             = local.private_zone
+  name             = local.vars.private_zone
   vpc {
     vpc_id         = aws_vpc.default.id
   }
   tags = {
-    Name           = local.private_zone
+    Name           = local.vars.private_zone
     Environment    = terraform.workspace
   }
 }
@@ -99,7 +99,7 @@ resource "aws_route53_record" "private" {
                        postfix:      aws_instance.mail.private_ip,
                        postgres:     aws_instance.mail.private_ip }
   zone_id          = aws_route53_zone.private.zone_id
-  name             = "${each.key}.${local.private_zone}"
+  name             = "${each.key}.${local.vars.private_zone}"
   type             = "A"
   ttl              = "300"
   records          = [each.value]
@@ -119,7 +119,7 @@ resource "aws_security_group" "public" {
       from_port    = ingress.value
       to_port      = ingress.value
       protocol     = "tcp"
-      cidr_blocks  = [local.all_ipv4]
+      cidr_blocks  = [local.vars.all_ipv4]
     }
   }
   egress {
@@ -127,7 +127,7 @@ resource "aws_security_group" "public" {
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = [local.all_ipv4]
+    cidr_blocks    = [local.vars.all_ipv4]
   }
   tags = {
     Name           = "${terraform.workspace}-${each.key}-public"
@@ -207,7 +207,7 @@ resource "aws_iam_role" "ecsTaskExecutionRole" {
 resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
   name_prefix           = "${terraform.workspace}-"
   description           = "Environment ${terraform.workspace}: ECS task execution permissions."
-  policy                = templatefile("etc/policies/ECSTaskExecution.json", { secrets = aws_ssm_parameter.secrets })
+  policy                = templatefile("etc/policies/ECSTaskExecution.json", { secrets = module.secrets.secrets })
 }
 
 resource "aws_iam_role_policy_attachment" "ecsTaskExecutionPolicy" {
@@ -227,41 +227,13 @@ resource "aws_key_pair" "production" {
   public_key       = file("${local.vars.ec2_ssh_key}")
 }
 
-# Generate n random passwords for each item in the 'secrets' map.
-resource "random_password" "passwords" {
-  count            = length(local.vars.secrets)
-  length           = local.vars.secrets_length
-  special          = false
-}
-
-# Slightly convoluted: create SSM encrypted parameters for n secrets
-resource "aws_ssm_parameter" "secrets" {
-  for_each         = toset(keys(local.vars.secrets))
-  name             = "/${terraform.workspace}/${each.value}"
-  description      = "${local.vars.secrets[each.value].description}"
-  type             = "SecureString"
-  value            = random_password.passwords[index(keys(local.vars.secrets), each.value)].result
-  overwrite        = true
-  tags = {
-    Name           = "${terraform.workspace}-${each.value}"
-    Environment    = terraform.workspace
-  }
-}
-
-resource "aws_ssm_parameter" "postgres_url" {
-  name             = "/${terraform.workspace}/postgres_url"
-  description      = "Database URL for Mailman."
-  type             = "SecureString"
-  value            = format("postgres://%s:%s@postgres.%s/%s",
-                            local.vars.postgres_user,
-                            aws_ssm_parameter.secrets["postgres_password"].value,
-                            local.private_zone,
-                            local.vars.postgres_db)
-  overwrite        = true
-  tags = {
-    Name           = "${terraform.workspace}-postgres_url"
-    Environment    = terraform.workspace
-  }
+module "secrets" {
+  source = "./modules/secrets"
+  secrets = local.vars.secrets
+  secrets_length = local.vars.secrets_length
+  postgres_user = local.vars.postgres_user
+  postgres_db = local.vars.postgres_db
+  private_zone = local.vars.private_zone
 }
 
 ## --------- NFS shared storage ------------------------------------------------
@@ -294,7 +266,7 @@ resource "aws_ecs_cluster" "ecs" {
 resource "aws_ecs_task_definition" "postgres" {
   family                     = "postgres"
   container_definitions      = templatefile("etc/tasks/postgres.json",
-                                            merge(local.vars, { secrets: aws_ssm_parameter.secrets }))
+                                            merge(local.vars, { secrets: module.secrets.secrets }))
   execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
   network_mode               = "host"
   memory                     = "256"
@@ -333,25 +305,23 @@ resource "aws_ecs_service" "postgres" {
   }
 }
 
-#resource "aws_ecs_task_definition" "mailman-core" {
-#  family                     = "mailman-core"
-#  container_definitions      = templatefile("etc/tasks/mailman-core.json",
-#                                            merge(local.vars,
-                                                   { secrets: aws_ssm_parameter.secrets,
-                                                     }))
-#  execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
-#  network_mode               = "host"
-#  memory                     = "256"
-#  volume {
-#    name                     = "mailman_core"
-#    host_path                = local.vars.mailman_core
-#  }
-#  requires_compatibilities   = [ "EC2" ]
-#  tags = {
-#    Name                     = "${terraform.workspace}-postgres"
-#    Environment              = terraform.workspace
-#  }
-#}
+resource "aws_ecs_task_definition" "mailman-core" {
+  family                     = "mailman-core"
+  container_definitions      = templatefile("etc/tasks/mailman-core.json",
+                                            merge(local.vars, { secrets: module.secrets.secrets }))
+  execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
+  network_mode               = "host"
+  memory                     = "256"
+  volume {
+    name                     = "mailman_core"
+    host_path                = local.vars.mailman_core
+  }
+  requires_compatibilities   = [ "EC2" ]
+  tags = {
+    Name                     = "${terraform.workspace}-mailman-core"
+    Environment              = terraform.workspace
+  }
+}
 
 ## --------- Instances ---------------------------------------------------------
 

@@ -1,0 +1,66 @@
+[
+  {
+    "name": "mailman-core",
+    "image": "maxking/mailman-core",
+    "memoryReservation": 256,
+    "cpu": 0,
+    "essential": true,
+    "environment": [
+      {
+        "name": "DATABASE_CLASS",
+        "value": "mailman.database.postgresql.PostgreSQLDatabase"
+      },
+      {
+        "name": "DATABASE_TYPE",
+        "value": "postgres"
+      },
+      {
+        "name": "HYPERKITTY_URL",
+        "value": "http://mailman-web.${private_zone}:8000/hyperkitty/"
+      },
+      {
+        "name": "MAILMAN_REST_URL",
+        "value": "http://mailman-core.${private_zone}:8001"
+      },
+      {
+        "name": "MAILMAN_REST_USER",
+        "value": "${mailman_rest_user}"
+      },
+      {
+        "name": "MTA",
+        "value": "postfix"
+      },
+      {
+        "name": "SMTP_HOST",
+        "value": "postfix.${private_zone}"
+      }
+    ],
+    "mountPoints": [
+      {
+        "containerPath": "/opt/mailman",
+        "sourceVolume": "mailman_core"
+      }
+    ],
+    "portMappings": [
+      {
+        "hostPort": 8001,
+        "containerPort": 8001,
+        "protocol": "tcp"
+      }
+    ],
+    "secrets": [
+      {
+        "name": "HYPERKITTY_API_KEY",
+        "valueFrom": "${secrets.hyperkitty_api_key}"
+      },
+      {
+        "name": "MAILMAN_REST_PASSWORD",
+        "valueFrom": "${secrets.mailman_rest_password}"
+      },
+      {
+        "name": "DATABASE_URL",
+        "valueFrom": "${secrets.postgres_url}"
+      }
+    ]
+  }
+]

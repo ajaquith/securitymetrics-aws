@@ -8,10 +8,6 @@ postfix_log: /opt/postfix/log
 postfix_data: /opt/postfix/data
 postgres_home: /opt/postgres
 
-# Accounts
-mailman_admin: mailman
-mailman_rest_user: restadmin
-
 # Secrets
 django_secret_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256

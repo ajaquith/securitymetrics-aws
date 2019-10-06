@@ -6,7 +6,7 @@
       "Effect": "Allow",
       "Resource": [
         %{ for secret in keys(secrets) ~}
-        "${secrets[secret].arn}"%{ if index(keys(secrets), secret) + 1 < length(secrets) }, %{ endif }
+        "${secrets[secret]}"%{ if index(keys(secrets), secret) + 1 < length(secrets) }, %{ endif }
         %{ endfor ~}        
       ]
     }

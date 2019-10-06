@@ -32,7 +32,7 @@
     "secrets": [
       {
         "name": "POSTGRES_PASSWORD",
-        "valueFrom": "${secrets.postgres_password.arn}"
+        "valueFrom": "${secrets.postgres_password}"
       }
     ]
   }

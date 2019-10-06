@@ -1,18 +1,18 @@
 # ========== OUTPUT VARIABLES ==================================================
 
-output "www_host" {
-  description      = "Web server name" 
-  value            = aws_instance.www.public_dns
+output "secrets" {
+  description      = "ARNs for secrets" 
+  value            = module.secrets.secrets
 }
 
-output "mail_host" {
-  description      = "Web server name" 
-  value            = aws_instance.mail.public_dns
+output "host_mail" {
+  description      = "Mail server name" 
+  value            = aws_instance.mail.public_ip
 }
 
-output "ec2_instance_id" {
-  description      = "Instance ID"
-  value            = aws_instance.www.id
+output "host_www" {
+  description      = "Web server name"
+  value            = aws_instance.www.public_ip
 }
 
 output "efs_id" {
