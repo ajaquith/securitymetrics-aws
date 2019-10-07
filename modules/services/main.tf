@@ -86,3 +86,8 @@ resource "aws_ecs_task_definition" "mailman-core" {
 
 
 # ========== OUTPUT VARIABLES ==================================================
+
+output "cluster_arn" {
+  description      = "ARN of the ECS cluster." 
+  value            = aws_ecs_cluster.ecs.arn
+}

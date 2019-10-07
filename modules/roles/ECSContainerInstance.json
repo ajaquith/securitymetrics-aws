@@ -13,12 +13,10 @@
     },
     {
       "Action": [
-        "ecs:ListTasks",
-        "ecs:ListContainerInstances",
-        "ecs:StopTask"
+        "ecs:*"
       ],
       "Effect": "Allow",
-      "Resource": "*"
+      "Resource": "${cluster}"
     }
   ]
 }

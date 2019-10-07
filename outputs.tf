@@ -1,10 +1,5 @@
 # ========== OUTPUT VARIABLES ==================================================
 
-output "secrets" {
-  description      = "ARNs for secrets" 
-  value            = module.secrets.secrets
-}
-
 output "host_mail" {
   description      = "Mail server name" 
   value            = aws_instance.mail.public_ip

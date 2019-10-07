@@ -43,6 +43,7 @@ module "vpc" {
 module "roles" {
   source           = "./modules/roles"
   root             = local.root
+  cluster          = module.services.cluster_arn
   secrets          = module.secrets.secrets
 }
 
@@ -116,13 +117,6 @@ resource "aws_security_group" "private" {
     Name           = "${local.root.ec2_env}-${each.key}-private"
     Environment    = local.root.ec2_env
   }
-}
-
-## --------- Keys and secrets --------------------------------------------------
-
-resource "aws_key_pair" "production" {
-  key_name         = local.root.ec2_ssh_key_name
-  public_key       = file("${local.root.ec2_ssh_key}")
 }
 
 ## --------- NFS shared storage ------------------------------------------------

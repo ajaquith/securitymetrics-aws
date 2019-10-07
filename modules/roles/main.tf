@@ -8,6 +8,11 @@ variable "secrets" {
   type = map(string)
 }
 
+variable "cluster" {
+  type = string
+}
+
+
 # ========== DATA SOURCES (looked up by ID) ====================================
 
 data "aws_iam_policy" "AmazonEC2ContainerServiceforEC2Role" {
@@ -61,7 +66,7 @@ resource "aws_iam_role" "ecsTaskExecutionRole" {
 resource "aws_iam_policy" "ECSContainerInstance" {
   name_prefix           = "${var.root.ec2_env}-"
   description           = "Environment ${var.root.ec2_env}: EC2 policy for ECS and CloudWatch."
-  policy                = file("${path.module}/ECSContainerInstance.json")
+  policy                = templatefile("${path.module}/ECSContainerInstance.json", { cluster = var.cluster })
 }
 
 resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
