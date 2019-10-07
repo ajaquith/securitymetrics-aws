@@ -26,6 +26,9 @@
       register: aws
       run_once: yes
       become: no
+    - name: Set private zone
+      set_fact:
+        private_zone: "{{ ec2_environment }}.local"
   
   tasks:
     - import_role:

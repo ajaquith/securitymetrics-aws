@@ -6,6 +6,7 @@ ec2_instance_ami:  ami-039eb499c36219cad         # ID of the AMI used for EC2 in
 ansible_playbook:  playbook_ec2.yml              # Ansible playbook for provisioning EC2 instances
 import_archive:    no
 secrets_length:    32                            # Number of randomly generated chars in each secret
+generate_dh_param: yes
 
 # Variables shared with Ansible
 postgres_data:     /opt/postgres/data

@@ -56,6 +56,7 @@
     owner: root
     group: root
     mode: "u=rw,g=r,o="
+  when: generate_dh_param == true
 
 # Generate DKIM keys
 

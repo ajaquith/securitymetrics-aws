@@ -1,5 +1,6 @@
 ec2_vpc_cidr:      172.30.0.0/16
 public_domain:     markerbench.com
+generate_dh_param: no
 
 # Terraform auto-generates these subnets. The cidr_blocks must be globally
 # unique within the account.

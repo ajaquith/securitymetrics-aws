@@ -5,8 +5,13 @@
 #
 plugin: aws_ec2
 boto_profile: default
+
+# Prefer the public address as the hostname
+hostnames:
+  - ip-address
+
+# Add groups for each Environment tag value (staging, production, etc)
 keyed_groups:
-  # Add groups for each Environment tag value (staging, production, etc)
   - key: tags.Environment
     prefix: ""
     separator: ""
