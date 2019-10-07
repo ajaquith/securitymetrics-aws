@@ -29,14 +29,6 @@ data "aws_route53_zone" "public" {
   private_zone     = false
 }
 
-data "aws_iam_policy" "AmazonEC2ContainerServiceforEC2Role" {
-  arn              = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
-}
-
-data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
-  arn              = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
 # ========== RESOURCES =========================================================
 
 ## --------- Virtual private cloud ---------------------------------------------
@@ -104,60 +96,9 @@ resource "aws_security_group" "private" {
 
 ## --------- Roles and policies ------------------------------------------------
 
-resource "aws_iam_role" "EC2Instance" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: EC2 role for ECS and CloudWatch."
-  assume_role_policy    = file("etc/policies/EC2AssumeRole.json")
-  force_detach_policies = true
-  max_session_duration  = 3600
-}
-
-resource "aws_iam_instance_profile" "EC2Instance" {
-  name_prefix           = "${terraform.workspace}-"
-  role                  = aws_iam_role.EC2Instance.name
-}
-
-resource "aws_iam_role_policy_attachment" "ECSContainerInstance" {
-  role                  = aws_iam_role.EC2Instance.name
-  policy_arn            = aws_iam_policy.ECSContainerInstance.arn
-}
-
-resource "aws_iam_role_policy_attachment" "AmazonEC2ContainerServiceforEC2Role" {
-  role                  = aws_iam_role.EC2Instance.name
-  policy_arn            = data.aws_iam_policy.AmazonEC2ContainerServiceforEC2Role.arn
-}
-
-resource "aws_iam_policy" "ECSContainerInstance" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: EC2 policy for ECS and CloudWatch."
-  policy                = file("etc/policies/ECSContainerInstance.json")
-}
-
-resource "aws_iam_role" "ecsTaskExecutionRole" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: ECS task execution."
-  assume_role_policy    = file("etc/policies/ECSAssumeRole.json")
-  force_detach_policies = true
-  max_session_duration  = 3600
-  tags = {
-    Environment         = terraform.workspace
-  }
-}
-
-resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: ECS task execution permissions."
-  policy                = templatefile("etc/policies/ECSTaskExecution.json", { secrets = module.secrets.secrets })
-}
-
-resource "aws_iam_role_policy_attachment" "ecsTaskExecutionPolicy" {
-  role                  = aws_iam_role.ecsTaskExecutionRole.name
-  policy_arn            = aws_iam_policy.ecsTaskExecutionPolicy.arn
-}
-
-resource "aws_iam_role_policy_attachment" "AmazonECSTaskExecutionRolePolicy" {
-  role                  = aws_iam_role.ecsTaskExecutionRole.name
-  policy_arn            = data.aws_iam_policy.AmazonECSTaskExecutionRolePolicy.arn
+module "roles" {
+  source           = "./modules/roles"
+  secrets          = module.secrets.secrets
 }
 
 ## --------- Keys and secrets --------------------------------------------------
@@ -203,7 +144,7 @@ resource "aws_ecs_task_definition" "postgres" {
   family                     = "postgres"
   container_definitions      = templatefile("etc/tasks/postgres.json",
                                             merge(local.vars, { secrets: module.secrets.secrets }))
-  execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
+  execution_role_arn         = module.roles.execution_role_arn
   network_mode               = "host"
   memory                     = "256"
   volume {
@@ -245,7 +186,7 @@ resource "aws_ecs_task_definition" "mailman-core" {
   family                     = "mailman-core"
   container_definitions      = templatefile("etc/tasks/mailman-core.json",
                                             merge(local.vars, { secrets: module.secrets.secrets }))
-  execution_role_arn         = aws_iam_role.ecsTaskExecutionRole.arn
+  execution_role_arn         = module.roles.execution_role_arn
   network_mode               = "host"
   memory                     = "256"
   volume {
@@ -266,7 +207,7 @@ resource "aws_instance" "www" {
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
-  iam_instance_profile = aws_iam_instance_profile.EC2Instance.name
+  iam_instance_profile = module.roles.iam_instance_profile
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["https"].id,
                       aws_security_group.private["mailman-web"].id]
@@ -292,7 +233,7 @@ resource "aws_instance" "mail" {
   key_name         = local.vars.ec2_ssh_key_name
   ami              = local.vars.ec2_instance_ami
   instance_type    = local.vars.ec2_instance_type
-  iam_instance_profile = aws_iam_instance_profile.EC2Instance.name
+  iam_instance_profile = module.roles.iam_instance_profile
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["smtp"].id,
                       aws_security_group.private["postgres"].id,
