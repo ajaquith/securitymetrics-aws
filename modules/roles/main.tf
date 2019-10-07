@@ -23,6 +23,7 @@ data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
   arn              = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+
 # ========== RESOURCES =========================================================
 
 ## --------- EC2 instance profile ----------------------------------------------
@@ -84,6 +85,7 @@ resource "aws_iam_role_policy_attachment" "AmazonECSTaskExecutionRolePolicy" {
   role                  = aws_iam_role.ecsTaskExecutionRole.name
   policy_arn            = data.aws_iam_policy.AmazonECSTaskExecutionRolePolicy.arn
 }
+
 
 # ========== OUTPUT VARIABLES ==================================================
 

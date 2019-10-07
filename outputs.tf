@@ -12,7 +12,7 @@ output "host_www" {
 
 output "efs_id" {
   description      = "Elastic File Service ID"
-  value            = aws_efs_file_system.nfs.id
+  value            = module.efs.id
 }
 
 output "ec2_env" {

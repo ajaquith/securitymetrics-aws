@@ -53,6 +53,15 @@ module "secrets" {
   root             = local.root
 }
 
+# Elastic File System (EFS) service
+module "efs" {
+  source           = "./modules/efs"
+  root             = local.root
+  vpc_id           = module.vpc.vpc_id
+  subnet_ids       = module.vpc.subnet_ids
+  subnet_cidr_blocks = module.vpc.subnet_cidr_blocks
+}
+
 # Elastic Container Service (ECS) tasks and services
 module "services" {
   source           = "./modules/services"
@@ -119,27 +128,10 @@ resource "aws_security_group" "private" {
   }
 }
 
-## --------- NFS shared storage ------------------------------------------------
-
-resource "aws_efs_file_system" "nfs" {
-  creation_token   = "nfs"
-  tags = {
-    Name           = "${local.root.ec2_env}-nfs"
-    Environment    = local.root.ec2_env
-  }
-}
-
-resource "aws_efs_mount_target" "nfs" {
-  for_each = module.vpc.subnet_ids
-  file_system_id   = aws_efs_file_system.nfs.id
-  subnet_id        = each.value
-  security_groups  = [aws_security_group.private["nfs"].id]
-}
-
 ## --------- Instances ---------------------------------------------------------
 
 resource "aws_instance" "www" {
-  depends_on       = [aws_efs_mount_target.nfs]
+  depends_on       = [module.efs.id]
   key_name         = local.root.ec2_ssh_key_name
   ami              = local.root.ec2_instance_ami
   instance_type    = local.root.ec2_instance_type
@@ -154,7 +146,7 @@ resource "aws_instance" "www" {
     Name           = "${local.root.ec2_env}-www"
     Environment    = local.root.ec2_env
     Role           = "www"
-    EfsVolume      = aws_efs_file_system.nfs.id
+    EfsVolume      = module.efs.id
   }
   volume_tags = {
     Name           = "${local.root.ec2_env}-www"
@@ -165,7 +157,7 @@ resource "aws_instance" "www" {
 }
 
 resource "aws_instance" "mail" {
-  depends_on       = [aws_efs_mount_target.nfs]
+  depends_on       = [module.efs.id]
   key_name         = local.root.ec2_ssh_key_name
   ami              = local.root.ec2_instance_ami
   instance_type    = local.root.ec2_instance_type
@@ -181,7 +173,7 @@ resource "aws_instance" "mail" {
     Name           = "${local.root.ec2_env}-mail"
     Environment    = local.root.ec2_env
     Role           = "mail"
-    EfsVolume      = aws_efs_file_system.nfs.id
+    EfsVolume      = module.efs.id
   }
   volume_tags = {
     Name           = "${local.root.ec2_env}-mail"
