@@ -33,13 +33,13 @@ data "aws_route53_zone" "public" {
 
 # ========== MODULES ===========================================================
 
-# Virtual private cloud
+# Virtual private cloud (VPC) and subnets
 module "vpc" {
   source           = "./modules/vpc"
   root             = local.root
 }
 
-# Roles and policies
+# IAM roles and policies
 module "roles" {
   source           = "./modules/roles"
   root             = local.root
@@ -52,6 +52,13 @@ module "secrets" {
   root             = local.root
 }
 
+# Elastic Container Service (ECS) tasks and services
+module "services" {
+  source           = "./modules/services"
+  root             = local.root
+  secrets          = module.secrets.secrets
+  execution_role   = module.roles.execution_role_arn
+}
 
 # ========== RESOURCES =========================================================
 
@@ -133,76 +140,6 @@ resource "aws_efs_mount_target" "nfs" {
   file_system_id   = aws_efs_file_system.nfs.id
   subnet_id        = each.value
   security_groups  = [aws_security_group.private["nfs"].id]
-}
-
-## --------- ECS cluster -------------------------------------------------------
-
-resource "aws_ecs_cluster" "ecs" {
-  name = "${local.root.ec2_env}"
-  tags = {
-    Name         = "ecs"
-    Environment  = local.root.ec2_env
-  }
-}
-
-resource "aws_ecs_task_definition" "postgres" {
-  family                     = "postgres"
-  container_definitions      = templatefile("etc/tasks/postgres.json",
-                                            merge(local.root, { secrets: module.secrets.secrets }))
-  execution_role_arn         = module.roles.execution_role_arn
-  network_mode               = "host"
-  memory                     = "256"
-  volume {
-    name                     = "postgres_data"
-    host_path                = local.root.postgres_data
-  }
-  requires_compatibilities   = [ "EC2" ]
-  tags = {
-    Name                     = "${local.root.ec2_env}-postgres"
-    Environment              = local.root.ec2_env
-  }
-}
-
-resource "aws_ecs_service" "postgres" {
-  name                       = "postgres"
-  task_definition            = aws_ecs_task_definition.postgres.arn
-  launch_type                = "EC2"
-  scheduling_strategy        = "REPLICA"
-  desired_count              = 1
-  cluster                    = aws_ecs_cluster.ecs.arn
-  ordered_placement_strategy {
-    type                     = "binpack"
-    field                    = "memory"
-  }
-  placement_constraints {
-    type                     = "memberOf"
-    expression               = "attribute:Role == 'mail'"
-  }
-  lifecycle {
-    ignore_changes           = ["desired_count"]
-  }
-  tags = {
-    Name                     = "${local.root.ec2_env}-postgres"
-    Environment              = local.root.ec2_env
-  }
-}
-
-resource "aws_ecs_task_definition" "mailman-core" {
-  family                     = "mailman-core"
-  container_definitions      = templatefile("etc/tasks/mailman-core.json",
-                                            merge(local.root, { secrets: module.secrets.secrets }))
-  execution_role_arn         = module.roles.execution_role_arn
-  network_mode               = "host"
-  memory                     = "256"
-  volume {
-    name                     = "mailman_core"
-    host_path                = local.root.mailman_core
-  }
-  requires_compatibilities   = [ "EC2" ]
-  tags = {
-    Name                     = "${local.root.ec2_env}-mailman-core"
-    Environment              = local.root.ec2_env
-  }
 }
 
 ## --------- Instances ---------------------------------------------------------

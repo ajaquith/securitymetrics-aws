@@ -4,6 +4,7 @@ variable "root" {
   type = any
 }
 
+
 # ========== RESOURCES =========================================================
 
 ## --------- Virtual private cloud ---------------------------------------------
@@ -65,6 +66,7 @@ resource "aws_route" "internet" {
   destination_cidr_block     = "0.0.0.0/0"
   gateway_id                 = aws_internet_gateway.default.id
 }
+
 
 # ========== OUTPUT VARIABLES ==================================================
 

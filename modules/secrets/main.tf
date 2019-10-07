@@ -4,6 +4,7 @@ variable "root" {
   type = any
 }
 
+
 # ========== RESOURCES =========================================================
 
 # Generate n random passwords for each item in the 'secrets' map.
@@ -42,6 +43,7 @@ resource "aws_ssm_parameter" "postgres_url" {
     Environment    = var.root.ec2_env
   }
 }
+
 
 # ========== OUTPUT VARIABLES ==================================================
 
