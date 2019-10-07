@@ -28,14 +28,14 @@
       become: no
     - name: Set private zone
       set_fact:
-        private_zone: "{{ ec2_environment }}.local"
+        private_zone: "{{ ec2_env }}.local"
   
   tasks:
     - import_role:
         name: base
     - import_role:
         name: amazon
-      when: is_ec2_environment == true
+      when: is_ec2_env == true
     - import_role:
         name: keys
     - import_role:

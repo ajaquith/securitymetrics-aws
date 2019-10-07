@@ -16,19 +16,19 @@ resource "random_password" "passwords" {
 # Slightly convoluted: create SSM encrypted parameters for n secrets
 resource "aws_ssm_parameter" "secrets" {
   for_each         = toset(keys(var.root.secrets))
-  name             = "/${terraform.workspace}/${each.value}"
+  name             = "/${var.root.ec2_env}/${each.value}"
   description      = "${var.root.secrets[each.value].description}"
   type             = "SecureString"
   value            = random_password.passwords[index(keys(var.root.secrets), each.value)].result
   overwrite        = true
   tags = {
-    Name           = "${terraform.workspace}-${each.value}"
-    Environment    = terraform.workspace
+    Name           = "${var.root.ec2_env}-${each.value}"
+    Environment    = var.root.ec2_env
   }
 }
 
 resource "aws_ssm_parameter" "postgres_url" {
-  name             = "/${terraform.workspace}/postgres_url"
+  name             = "/${var.root.ec2_env}/postgres_url"
   description      = "Mailman database URL"
   type             = "SecureString"
   value            = format("postgres://%s:%s@postgres.%s/%s",
@@ -38,8 +38,8 @@ resource "aws_ssm_parameter" "postgres_url" {
                             var.root.postgres_db)
   overwrite        = true
   tags = {
-    Name           = "${terraform.workspace}-postgres_url"
-    Environment    = terraform.workspace
+    Name           = "${var.root.ec2_env}-postgres_url"
+    Environment    = var.root.ec2_env
   }
 }
 

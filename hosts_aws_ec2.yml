@@ -18,7 +18,7 @@ keyed_groups:
     
 # Inject host variables based on EC2 instance tags and attributes
 compose:
-  ec2_environment: tags.Environment
+  ec2_env: tags.Environment
   ec2_region: placement_region
   ec2_role: tags.Role
-  is_ec2_environment: true
+  is_ec2_env: true

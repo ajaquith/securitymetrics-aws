@@ -11,8 +11,9 @@ terraform {
 
 provider "aws" { 
   profile = "default"
-  region = local.vars.ec2_region
+  region = local.root.ec2_region
 }
+
 
 # ========== DATA SOURCES (looked up by ID) ====================================
 
@@ -25,24 +26,40 @@ data "aws_iam_group" "cloudadmins" {
 }
 
 data "aws_route53_zone" "public" {
-  name             = "${local.vars.public_domain}."
+  name             = "${local.root.public_domain}."
   private_zone     = false
 }
 
-# ========== RESOURCES =========================================================
 
-## --------- Virtual private cloud ---------------------------------------------
+# ========== MODULES ===========================================================
 
+# Virtual private cloud
 module "vpc" {
   source           = "./modules/vpc"
-  root             = local.vars
+  root             = local.root
 }
+
+# Roles and policies
+module "roles" {
+  source           = "./modules/roles"
+  root             = local.root
+  secrets          = module.secrets.secrets
+}
+
+# Secrets
+module "secrets" {
+  source           = "./modules/secrets"
+  root             = local.root
+}
+
+
+# ========== RESOURCES =========================================================
 
 ## --------- Security groups ---------------------------------------------------
 
 resource "aws_security_group" "public" {
-  for_each         = local.vars.security_groups["public"]
-  name             = "${terraform.workspace}-${each.key}-public"
+  for_each         = local.root.security_groups["public"]
+  name             = "${local.root.ec2_env}-${each.key}-public"
   description      = each.value.description
   vpc_id           = module.vpc.vpc_id
   dynamic "ingress" {
@@ -62,14 +79,14 @@ resource "aws_security_group" "public" {
     cidr_blocks    = [module.vpc.any_cidr_block]
   }
   tags = {
-    Name           = "${terraform.workspace}-${each.key}-public"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-${each.key}-public"
+    Environment    = local.root.ec2_env
   }
 }
 
 resource "aws_security_group" "private" {
-  for_each         = local.vars.security_groups["private"]
-  name             = "${terraform.workspace}-${each.key}-private"
+  for_each         = local.root.security_groups["private"]
+  name             = "${local.root.ec2_env}-${each.key}-private"
   description      = each.value.description
   vpc_id           = module.vpc.vpc_id
   dynamic "ingress" {
@@ -89,28 +106,16 @@ resource "aws_security_group" "private" {
     cidr_blocks    = values(module.vpc.subnet_cidr_blocks)
   }
   tags = {
-    Name           = "${terraform.workspace}-${each.key}-private"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-${each.key}-private"
+    Environment    = local.root.ec2_env
   }
-}
-
-## --------- Roles and policies ------------------------------------------------
-
-module "roles" {
-  source           = "./modules/roles"
-  secrets          = module.secrets.secrets
 }
 
 ## --------- Keys and secrets --------------------------------------------------
 
 resource "aws_key_pair" "production" {
-  key_name         = local.vars.ec2_ssh_key_name
-  public_key       = file("${local.vars.ec2_ssh_key}")
-}
-
-module "secrets" {
-  source           = "./modules/secrets"
-  root             = local.vars
+  key_name         = local.root.ec2_ssh_key_name
+  public_key       = file("${local.root.ec2_ssh_key}")
 }
 
 ## --------- NFS shared storage ------------------------------------------------
@@ -118,8 +123,8 @@ module "secrets" {
 resource "aws_efs_file_system" "nfs" {
   creation_token   = "nfs"
   tags = {
-    Name           = "${terraform.workspace}-nfs"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-nfs"
+    Environment    = local.root.ec2_env
   }
 }
 
@@ -133,28 +138,28 @@ resource "aws_efs_mount_target" "nfs" {
 ## --------- ECS cluster -------------------------------------------------------
 
 resource "aws_ecs_cluster" "ecs" {
-  name = "${terraform.workspace}"
+  name = "${local.root.ec2_env}"
   tags = {
     Name         = "ecs"
-    Environment  = terraform.workspace
+    Environment  = local.root.ec2_env
   }
 }
 
 resource "aws_ecs_task_definition" "postgres" {
   family                     = "postgres"
   container_definitions      = templatefile("etc/tasks/postgres.json",
-                                            merge(local.vars, { secrets: module.secrets.secrets }))
+                                            merge(local.root, { secrets: module.secrets.secrets }))
   execution_role_arn         = module.roles.execution_role_arn
   network_mode               = "host"
   memory                     = "256"
   volume {
     name                     = "postgres_data"
-    host_path                = local.vars.postgres_data
+    host_path                = local.root.postgres_data
   }
   requires_compatibilities   = [ "EC2" ]
   tags = {
-    Name                     = "${terraform.workspace}-postgres"
-    Environment              = terraform.workspace
+    Name                     = "${local.root.ec2_env}-postgres"
+    Environment              = local.root.ec2_env
   }
 }
 
@@ -177,26 +182,26 @@ resource "aws_ecs_service" "postgres" {
     ignore_changes           = ["desired_count"]
   }
   tags = {
-    Name                     = "${terraform.workspace}-postgres"
-    Environment              = terraform.workspace
+    Name                     = "${local.root.ec2_env}-postgres"
+    Environment              = local.root.ec2_env
   }
 }
 
 resource "aws_ecs_task_definition" "mailman-core" {
   family                     = "mailman-core"
   container_definitions      = templatefile("etc/tasks/mailman-core.json",
-                                            merge(local.vars, { secrets: module.secrets.secrets }))
+                                            merge(local.root, { secrets: module.secrets.secrets }))
   execution_role_arn         = module.roles.execution_role_arn
   network_mode               = "host"
   memory                     = "256"
   volume {
     name                     = "mailman_core"
-    host_path                = local.vars.mailman_core
+    host_path                = local.root.mailman_core
   }
   requires_compatibilities   = [ "EC2" ]
   tags = {
-    Name                     = "${terraform.workspace}-mailman-core"
-    Environment              = terraform.workspace
+    Name                     = "${local.root.ec2_env}-mailman-core"
+    Environment              = local.root.ec2_env
   }
 }
 
@@ -204,9 +209,9 @@ resource "aws_ecs_task_definition" "mailman-core" {
 
 resource "aws_instance" "www" {
   depends_on       = [aws_efs_mount_target.nfs]
-  key_name         = local.vars.ec2_ssh_key_name
-  ami              = local.vars.ec2_instance_ami
-  instance_type    = local.vars.ec2_instance_type
+  key_name         = local.root.ec2_ssh_key_name
+  ami              = local.root.ec2_instance_ami
+  instance_type    = local.root.ec2_instance_type
   iam_instance_profile = module.roles.iam_instance_profile
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["https"].id,
@@ -215,14 +220,14 @@ resource "aws_instance" "www" {
   subnet_id        = module.vpc.subnet_ids["subnet1"]
   associate_public_ip_address = true
   tags = {
-    Name           = "${terraform.workspace}-www"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-www"
+    Environment    = local.root.ec2_env
     Role           = "www"
     EfsVolume      = aws_efs_file_system.nfs.id
   }
   volume_tags = {
-    Name           = "${terraform.workspace}-www"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-www"
+    Environment    = local.root.ec2_env
     Role           = "www"
   }
   user_data        = file("roles/base/templates/ec2_init.sh")
@@ -230,9 +235,9 @@ resource "aws_instance" "www" {
 
 resource "aws_instance" "mail" {
   depends_on       = [aws_efs_mount_target.nfs]
-  key_name         = local.vars.ec2_ssh_key_name
-  ami              = local.vars.ec2_instance_ami
-  instance_type    = local.vars.ec2_instance_type
+  key_name         = local.root.ec2_ssh_key_name
+  ami              = local.root.ec2_instance_ami
+  instance_type    = local.root.ec2_instance_type
   iam_instance_profile = module.roles.iam_instance_profile
   vpc_security_group_ids = [aws_security_group.public["ssh"].id,
                       aws_security_group.public["smtp"].id,
@@ -242,14 +247,14 @@ resource "aws_instance" "mail" {
   subnet_id        = module.vpc.subnet_ids["subnet2"]
   associate_public_ip_address = true
   tags = {
-    Name           = "${terraform.workspace}-mail"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-mail"
+    Environment    = local.root.ec2_env
     Role           = "mail"
     EfsVolume      = aws_efs_file_system.nfs.id
   }
   volume_tags = {
-    Name           = "${terraform.workspace}-mail"
-    Environment    = terraform.workspace
+    Name           = "${local.root.ec2_env}-mail"
+    Environment    = local.root.ec2_env
     Role           = "mail"
   }
   user_data        = file("roles/base/templates/ec2_init.sh")
@@ -263,7 +268,7 @@ resource "aws_route53_record" "private" {
                        postfix:      aws_instance.mail.private_ip,
                        postgres:     aws_instance.mail.private_ip }
   zone_id          = module.vpc.private_zone_id
-  name             = "${each.key}.${local.vars.private_zone}"
+  name             = "${each.key}.${local.root.private_zone}"
   type             = "A"
   ttl              = "300"
   records          = [each.value]
@@ -281,7 +286,7 @@ resource "null_resource" "instances" {
         wait 30; \
         ansible-playbook \
             --ssh-extra-args='-o StrictHostKeyChecking=no' \
-            ${local.vars.ansible_playbook}
+            ${local.root.ansible_playbook}
         EOT
   }
 }

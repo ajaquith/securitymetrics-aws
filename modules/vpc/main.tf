@@ -17,8 +17,8 @@ resource "aws_vpc" "default" {
   enable_classiclink_dns_support       = false
   assign_generated_ipv6_cidr_block     = false
   tags = {
-    Name           = "${terraform.workspace}-vpc"
-    Environment    = terraform.workspace
+    Name           = "${var.root.ec2_env}-vpc"
+    Environment    = var.root.ec2_env
   }
 }
 
@@ -31,7 +31,7 @@ resource "aws_route53_zone" "private" {
   }
   tags = {
     Name           = var.root.private_zone
-    Environment    = terraform.workspace
+    Environment    = var.root.ec2_env
   }
 }
 
@@ -45,8 +45,8 @@ resource "aws_subnet" "subnets" {
   assign_ipv6_address_on_creation      = false
   vpc_id                               = aws_vpc.default.id
   tags = {
-    Name                               = "${terraform.workspace}-${each.key}"
-    Environment                        = terraform.workspace
+    Name                               = "${var.root.ec2_env}-${each.key}"
+    Environment                        = var.root.ec2_env
   }
 }
 
@@ -55,8 +55,8 @@ resource "aws_subnet" "subnets" {
 resource "aws_internet_gateway" "default" {
   vpc_id           = aws_vpc.default.id
   tags = {
-    Name           = "${terraform.workspace}-internet"
-    Environment    = terraform.workspace
+    Name           = "${var.root.ec2_env}-internet"
+    Environment    = var.root.ec2_env
   }
 }
 

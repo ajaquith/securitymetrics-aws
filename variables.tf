@@ -8,6 +8,7 @@ locals {
   env_file                   = "./group_vars/${terraform.workspace}/main.yml"
   env_content                = fileexists(local.env_file) ? file(local.env_file) : "NoSettingsFileFound: true"
   env_vars                   = yamldecode(local.env_content)
-  vars                       = merge(local.default_vars, local.env_vars,
-                                     { private_zone: "${terraform.workspace}.local" } )
+  root                       = merge(local.default_vars, local.env_vars,
+                                     { private_zone: "${terraform.workspace}.local",
+                                       ec2_env: terraform.workspace } )
 }

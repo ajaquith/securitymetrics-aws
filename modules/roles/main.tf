@@ -1,5 +1,9 @@
 # ========== INPUT VARIABLES ===================================================
 
+variable "root" {
+  type = any
+}
+
 variable "secrets" {
   type = map(string)
 }
@@ -19,13 +23,13 @@ data "aws_iam_policy" "AmazonECSTaskExecutionRolePolicy" {
 ## --------- EC2 instance profile ----------------------------------------------
 
 resource "aws_iam_instance_profile" "EC2Instance" {
-  name_prefix           = "${terraform.workspace}-"
+  name_prefix           = "${var.root.ec2_env}-"
   role                  = aws_iam_role.EC2Instance.name
 }
 
 resource "aws_iam_role" "EC2Instance" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: EC2 role for ECS and CloudWatch."
+  name_prefix           = "${var.root.ec2_env}-"
+  description           = "Environment ${var.root.ec2_env}: EC2 role for ECS and CloudWatch."
   assume_role_policy    = file("${path.module}/EC2AssumeRole.json")
   force_detach_policies = true
   max_session_duration  = 3600
@@ -44,25 +48,25 @@ resource "aws_iam_role_policy_attachment" "ECSContainerInstance" {
 ## --------- ECS task execution role -------------------------------------------
 
 resource "aws_iam_role" "ecsTaskExecutionRole" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: ECS task execution."
+  name_prefix           = "${var.root.ec2_env}-"
+  description           = "Environment ${var.root.ec2_env}: ECS task execution."
   assume_role_policy    = file("${path.module}/ECSAssumeRole.json")
   force_detach_policies = true
   max_session_duration  = 3600
   tags = {
-    Environment         = terraform.workspace
+    Environment         = var.root.ec2_env
   }
 }
 
 resource "aws_iam_policy" "ECSContainerInstance" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: EC2 policy for ECS and CloudWatch."
+  name_prefix           = "${var.root.ec2_env}-"
+  description           = "Environment ${var.root.ec2_env}: EC2 policy for ECS and CloudWatch."
   policy                = file("${path.module}/ECSContainerInstance.json")
 }
 
 resource "aws_iam_policy" "ecsTaskExecutionPolicy" {
-  name_prefix           = "${terraform.workspace}-"
-  description           = "Environment ${terraform.workspace}: ECS task execution permissions."
+  name_prefix           = "${var.root.ec2_env}-"
+  description           = "Environment ${var.root.ec2_env}: ECS task execution permissions."
   policy                = templatefile("${path.module}/ECSTaskExecution.json", { secrets = var.secrets })
 }
 

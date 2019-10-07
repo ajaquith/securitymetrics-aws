@@ -20,7 +20,7 @@ output "efs_id" {
   value            = aws_efs_file_system.nfs.id
 }
 
-output "ec2_environment" {
+output "ec2_env" {
   description      = "EC2 environment, aka terraform workspace"
-  value            = terraform.workspace
+  value            = local.root.ec2_env
 }

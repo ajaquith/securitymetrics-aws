@@ -11,7 +11,7 @@
     - name: Gather facts
       setup:
     - set_fact:
-        is_ec2_environment: "{{ 'amazon' in ansible_bios_version }}"
+        is_ec2_env: "{{ 'amazon' in ansible_bios_version }}"
 
   tasks:
     - import_role:
@@ -19,7 +19,7 @@
     - include_role:
         name: amazon
         tasks_from: cloudwatch-logs
-      when: is_ec2_environment == true
+      when: is_ec2_env == true
     - import_role:
         name: docker
     - import_role:
@@ -29,7 +29,7 @@
     - import_role:
         name: amazon
         tasks_from: update_dns
-      when: is_ec2_environment == true
+      when: is_ec2_env == true
     - import_role:
         name: import_archive
       when: import_archive == true

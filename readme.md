@@ -42,9 +42,9 @@ The Terraform plan:
 
 3. Creates an AWS security group, in the subnet `aws_vpc_subnet_id`, for each port opened to the Internet: 22 (SSH), 25 (SMTP), and 80/443 (HTTP/HTTPS). The groups are named _`environment`_`-ssh`, _`environment`_`-smtp`, and _`environment`_`-https` respectively. HTTP and HTTPS are combined in the same security group. Each security group allows traffic to or from any IP address. Each group is tagged with Environment _`environment`_.
 
-4. Creates an EC2 node named `www`.`_public_domain_`, in the VPC subnet `aws_vpc_subnet_id`, using the AMI `ec2_instance_ami` as the source. This AMI is a [current version of Alpine Linux](https://github.com/ajaquith/alpine-ec2-ami). The playbook does _not_ assign a public IP address, but enables monitoring, and sets the `Name`  and `Environment` tags to `www`.`_public_domain_` and `ec2_environment`, respectively. It assigns the IAM instance profile role `ec2_iam_role`.
+4. Creates an EC2 node named `www`.`_public_domain_`, in the VPC subnet `aws_vpc_subnet_id`, using the AMI `ec2_instance_ami` as the source. This AMI is a [current version of Alpine Linux](https://github.com/ajaquith/alpine-ec2-ami). The playbook does _not_ assign a public IP address, but enables monitoring, and sets the `Name`  and `Environment` tags to `www`.`_public_domain_` and `ec2_env`, respectively. It assigns the IAM instance profile role `ec2_iam_role`.
 
-5. Creates an EC2 Elastic IP, if it does not already exist, setting the `Name`  and `Environment` tags to `www`.`_public_domain_` and `ec2_environment`, respectively.
+5. Creates an EC2 Elastic IP, if it does not already exist, setting the `Name`  and `Environment` tags to `www`.`_public_domain_` and `ec2_env`, respectively.
 
 6. Associates the EC2 Elastic IP with the EC2 node.
 
@@ -64,7 +64,7 @@ The production site is not running yet.
 
 The Ansible playbook `playbook_ec2.yml` configures the test, dev and prod production machines in three steps. The playbook:
 
-1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual. If the string `amazon` is found in the Ansible host fact `ansible_bios_version`, the variable `is_ec2_environment` is set to `true` so that other tasks can use it.
+1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual. If the string `amazon` is found in the Ansible host fact `ansible_bios_version`, the variable `is_ec2_env` is set to `true` so that other tasks can use it.
 
 2. __Executes the `base`, `docker`, `keys`, `mailman`, and `import_archive` roles__ as required. In addition, for public mail servers, the playbook includes and runs the `update_dns` tasks from the `amazon` role to ensure that any MX, SPF or DKIM DNS records are updated. Details on each role follow in the next section.
 
@@ -186,7 +186,7 @@ The `mailman` role is complex. It performs the following tasks:
 
 ## The `amazon` role's `update_dns` tasks
 
-For Amazon servers running a mail server, the `update_dns` tasks create a DKIM record in DNS, and create an SPF record whitelisting the server to send email. These tasks runs only if the `is_ec2_environment` variable evaluates to `true`. 
+For Amazon servers running a mail server, the `update_dns` tasks create a DKIM record in DNS, and create an SPF record whitelisting the server to send email. These tasks runs only if the `is_ec2_env` variable evaluates to `true`. 
 
 For security reasons, the portions of this role that update Amazon Web Services do not execute on the remote host; these steps use the `local_action` idiom to execute on the Ansible controller workstation. The role:
 
