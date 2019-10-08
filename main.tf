@@ -1,3 +1,19 @@
+# ========== LOCALS ============================================================
+
+# Define defaults, then merge per-environment variables as described in https://github.com/hashicorp/terraform/issues/15966
+locals {
+  default_file               = "./group_vars/all/main.yml"
+  default_content            = fileexists(local.default_file) ? file(local.default_file) : "NoSettingsFileFound: true"
+  default_vars               = yamldecode(local.default_content)
+  env_file                   = "./group_vars/${terraform.workspace}/main.yml"
+  env_content                = fileexists(local.env_file) ? file(local.env_file) : "NoSettingsFileFound: true"
+  env_vars                   = yamldecode(local.env_content)
+  root                       = merge(local.default_vars, local.env_vars,
+                                     { private_zone: "${terraform.workspace}.local",
+                                       ec2_env: terraform.workspace } )
+}
+
+
 # ========== PROVIDERS =========================================================
 
 terraform {
@@ -60,7 +76,7 @@ module "services" {
   root             = local.root
   vpc_id           = module.vpc.vpc_id
   subnet_cidr_blocks = module.vpc.subnet_cidr_blocks
-  any_cidr_block   = module.vpc.any_cidr_block
+  role_private_ips = module.instances.role_private_ips
   execution_role   = module.roles.execution_role_arn
   secrets          = module.secrets.secrets
 }
@@ -71,89 +87,29 @@ module "instances" {
   root             = local.root
   vpc_id           = module.vpc.vpc_id
   subnet_ids       = module.vpc.subnet_ids
-  any_cidr_block   = module.vpc.any_cidr_block
+  efs_id           = module.efs.id
   instance_profile = module.roles.iam_instance_profile
 }
 
 
-# ========== RESOURCES =========================================================
+# ========== OUTPUT VARIABLES ==================================================
 
-## --------- Instances ---------------------------------------------------------
-
-resource "aws_instance" "www" {
-  depends_on       = [module.efs.id]
-  key_name         = local.root.ec2_ssh_key_name
-  ami              = local.root.ec2_instance_ami
-  instance_type    = local.root.ec2_instance_type
-  iam_instance_profile = module.roles.iam_instance_profile
-  vpc_security_group_ids = [module.instances.ssh_security_group_id]
-  monitoring       = true
-  subnet_id        = module.vpc.subnet_ids["subnet1"]
-  associate_public_ip_address = true
-  tags = {
-    Name           = "${local.root.ec2_env}-www"
-    Environment    = local.root.ec2_env
-    Role           = "www"
-    EfsVolume      = module.efs.id
-  }
-  volume_tags = {
-    Name           = "${local.root.ec2_env}-www"
-    Environment    = local.root.ec2_env
-    Role           = "www"
-  }
-  user_data        = file("roles/base/templates/ec2_init.sh")
+output "host_mail" {
+  description      = "Mail server IP address" 
+  value            = module.instances.role_public_ips["mail"]
 }
 
-resource "aws_instance" "mail" {
-  depends_on       = [module.efs.id]
-  key_name         = local.root.ec2_ssh_key_name
-  ami              = local.root.ec2_instance_ami
-  instance_type    = local.root.ec2_instance_type
-  iam_instance_profile = module.roles.iam_instance_profile
-  vpc_security_group_ids = [module.instances.ssh_security_group_id]
-  monitoring       = true
-  subnet_id        = module.vpc.subnet_ids["subnet2"]
-  associate_public_ip_address = true
-  tags = {
-    Name           = "${local.root.ec2_env}-mail"
-    Environment    = local.root.ec2_env
-    Role           = "mail"
-    EfsVolume      = module.efs.id
-  }
-  volume_tags = {
-    Name           = "${local.root.ec2_env}-mail"
-    Environment    = local.root.ec2_env
-    Role           = "mail"
-  }
-  user_data        = file("roles/base/templates/ec2_init.sh")
+output "host_www" {
+  description      = "Web server IP address"
+  value            = module.instances.role_public_ips["www"]
 }
 
-resource "aws_route53_record" "private" {
-  depends_on       = [aws_instance.www, aws_instance.mail]
-  for_each         = { mailman-web:  aws_instance.www.private_ip,
-                       mailman-core: aws_instance.mail.private_ip,
-                       postfix:      aws_instance.mail.private_ip,
-                       postgres:     aws_instance.mail.private_ip }
-  zone_id          = module.vpc.private_zone_id
-  name             = "${each.key}.${local.root.private_zone}"
-  type             = "A"
-  ttl              = "300"
-  records          = [each.value]
-  allow_overwrite  = true
+output "efs_id" {
+  description      = "Elastic File Service ID"
+  value            = module.efs.id
 }
 
-resource "null_resource" "instances" {
-  # Changes to any instance of the cluster requires re-provisioning
-  triggers = {
-    instance_ids = "${join(",", aws_instance.www.*.id, aws_instance.mail.*.id)}"
-  }
-
-  provisioner "local-exec" {
-    command        = <<-EOT
-        wait 30; \
-        ansible-playbook \
-            --ssh-extra-args='-o StrictHostKeyChecking=no' \
-            ${local.root.ansible_playbook}
-        EOT
-  }
+output "ec2_env" {
+  description      = "EC2 environment, aka terraform workspace"
+  value            = local.root.ec2_env
 }

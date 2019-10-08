@@ -12,8 +12,8 @@ variable "subnet_cidr_blocks" {
   type = map(string)
 }
 
-variable "any_cidr_block" {
-  type = string
+variable "role_private_ips" {
+  type = map(string)
 }
 
 variable "execution_role" {
@@ -36,6 +36,8 @@ resource "aws_ecs_cluster" "ecs" {
     Environment  = var.root.ec2_env
   }
 }
+
+## --------- ECS task and service definitions ----------------------------------
 
 resource "aws_ecs_task_definition" "tasks" {
   for_each                   = var.root.services
@@ -99,7 +101,7 @@ resource "aws_security_group" "tasks" {
       from_port    = split(":", ingress.value)[0]
       to_port      = split(":", ingress.value)[0]
       protocol     = "tcp"
-      cidr_blocks  = each.value.public ? [var.any_cidr_block] : values(var.subnet_cidr_blocks)
+      cidr_blocks  = each.value.public ? ["0.0.0.0/0"] : values(var.subnet_cidr_blocks)
     }
   }
   egress {
@@ -107,13 +109,39 @@ resource "aws_security_group" "tasks" {
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = each.value.public ? [var.any_cidr_block] : values(var.subnet_cidr_blocks)
+    cidr_blocks    = each.value.public ? ["0.0.0.0/0"] : values(var.subnet_cidr_blocks)
   }
   tags = {
     Name           = "${var.root.ec2_env}-${each.key}-${each.value.public ? "public" : "private"}"
     Environment    = var.root.ec2_env
     Role           = each.value.on_role
   }
+}
+
+## --------- Private DNS registry for services ---------------------------------
+
+resource "aws_route53_zone" "private" {
+  name             = var.root.private_zone
+  vpc {
+    vpc_id         = var.vpc_id
+  }
+  tags = {
+    Name           = var.root.private_zone
+    Environment    = var.root.ec2_env
+  }
+}
+
+resource "aws_route53_record" "private" {
+  for_each         = { mailman-web:  var.role_private_ips["www"],
+                       mailman-core: var.role_private_ips["mail"],
+                       postfix:      var.role_private_ips["mail"],
+                       postgres:     var.role_private_ips["mail"] }
+  zone_id          = aws_route53_zone.private.zone_id
+  name             = "${each.key}.${var.root.private_zone}"
+  type             = "A"
+  ttl              = "300"
+  records          = [each.value]
+  allow_overwrite  = true
 }
 
 

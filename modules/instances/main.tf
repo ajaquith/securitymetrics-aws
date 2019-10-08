@@ -12,7 +12,7 @@ variable "subnet_ids" {
   type = map(string)
 }
 
-variable "any_cidr_block" {
+variable "efs_id" {
   type = string
 }
 
@@ -23,6 +23,74 @@ variable "instance_profile" {
 
 # ========== RESOURCES =========================================================
 
+## --------- EC2 instances -----------------------------------------------------
+
+resource "aws_instance" "www" {
+  key_name         = var.root.ec2_ssh_key_name
+  ami              = var.root.ec2_instance_ami
+  instance_type    = var.root.ec2_instance_type
+  iam_instance_profile       = var.instance_profile
+  vpc_security_group_ids     = [aws_security_group.ssh.id]
+  monitoring       = true
+  subnet_id        = var.subnet_ids["subnet1"]
+  associate_public_ip_address = true
+  tags = {
+    Name           = "${var.root.ec2_env}-www"
+    Environment    = var.root.ec2_env
+    Role           = "www"
+    EfsVolume      = var.efs_id
+  }
+  volume_tags = {
+    Name           = "${var.root.ec2_env}-www"
+    Environment    = var.root.ec2_env
+    Role           = "www"
+  }
+  user_data        = file("roles/base/templates/ec2_init.sh")
+}
+
+resource "aws_instance" "mail" {
+  key_name         = var.root.ec2_ssh_key_name
+  ami              = var.root.ec2_instance_ami
+  instance_type    = var.root.ec2_instance_type
+  iam_instance_profile       = var.instance_profile
+  vpc_security_group_ids     = [aws_security_group.ssh.id]
+  monitoring       = true
+  subnet_id        = var.subnet_ids["subnet2"]
+  associate_public_ip_address = true
+  tags = {
+    Name           = "${var.root.ec2_env}-mail"
+    Environment    = var.root.ec2_env
+    Role           = "mail"
+    EfsVolume      = var.efs_id
+  }
+  volume_tags = {
+    Name           = "${var.root.ec2_env}-mail"
+    Environment    = var.root.ec2_env
+    Role           = "mail"
+  }
+  user_data        = file("roles/base/templates/ec2_init.sh")
+}
+
+## --------- Ansible provisioner -----------------------------------------------
+
+resource "null_resource" "instances" {
+  # Changes to any instance of the cluster requires re-provisioning
+  triggers = {
+    instance_ids = "${join(",", aws_instance.www.*.id, aws_instance.mail.*.id)}"
+  }
+
+  provisioner "local-exec" {
+    command        = <<-EOT
+        wait 30; \
+        ansible-playbook \
+            --ssh-extra-args='-o StrictHostKeyChecking=no' \
+            ${var.root.ansible_playbook}
+        EOT
+  }
+}
+
+## --------- SSH security group ------------------------------------------------
+
 resource "aws_security_group" "ssh" {
   name             = "${var.root.ec2_env}-ssh-public"
   description      = "SSH"
@@ -31,14 +99,14 @@ resource "aws_security_group" "ssh" {
     from_port      = 22
     to_port        = 22
     protocol       = "tcp"
-    cidr_blocks    = [var.any_cidr_block]
+    cidr_blocks    = ["0.0.0.0/0"]
   }
   egress {
     description    = "All IPv4"
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = [var.any_cidr_block]
+    cidr_blocks    = ["0.0.0.0/0"]
   }
   tags = {
     Name           = "${var.root.ec2_env}-ssh-public"
@@ -49,7 +117,14 @@ resource "aws_security_group" "ssh" {
 
 # ========== OUTPUT VARIABLES ==================================================
 
-output "ssh_security_group_id" {
-  description      = "IDs of the SSH security group." 
-  value            = aws_security_group.ssh.id
+output "role_private_ips" {
+  description      = "Map with keys = role names, and values = private IP addresses."
+  value            = { "www": aws_instance.www.private_ip,
+                       "mail": aws_instance.mail.private_ip }
+}
+
+output "role_public_ips" {
+  description      = "Map with keys = role names, and values = public IP addresses."
+  value            = { "www": aws_instance.www.public_ip,
+                       "mail": aws_instance.mail.public_ip }
 }
