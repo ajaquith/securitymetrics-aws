@@ -7,13 +7,25 @@ ansible_playbook:  playbook_ec2.yml              # Ansible playbook for provisio
 import_archive:    no
 secrets_length:    32                            # Number of randomly generated chars in each secret
 generate_dh_param: yes
+email_size_limit:  102400
 
 # Host bind-mount paths
-postgres_data:     /opt/postgres/data
+acme_challenge:    /opt/keys/acme/challenge
+dkim_data:         /opt/keys/dkim
 mailman_core:      /opt/mailman/core
+mailman_postmap:   /opt/mailman/core/var/data
+mailman_web_data:  /opt/mailman/web
+nginx_conf:        /opt/nginx/conf
+nginx_html:        /opt/nginx/html
+postfix_data:      /opt/postfix/data
+postfix_init:      /opt/postfix/init
+postfix_log:       /opt/postfix/log
+postgres_data:     /opt/postgres/data
+tls_data:          /opt/keys/tls
 
 # Other variables shared with Ansible
 mailman_admin:     mailman
+mailman_email:     ajaquith@apache.org
 mailman_rest_user: restadmin
 postgres_user:     postgres
 postgres_db:       mailmandb
@@ -55,19 +67,46 @@ services:
     public:        no
     mounts:
       - mailman_core:/opt/mailman
-
-# Terraform auto-generates security groups for each item in the security_groups: map.
-# 'public' groups are globally routable. 'private' groups route just within VPC
-# private subnets.
-security_groups:
-  public:
-    smtp:
-      ports:       [25]
-      description: SMTP
-    https:
-      ports:       [80, 443]
-      description: HTTP/S
-  private:
-    mailman-web:
-      ports:       [8000]
-      description: HyperKitty and Postorius REST API
+  mailman-web:
+    description:   HyperKitty and Postorius REST API (private)
+    ecs_service:   yes
+    memory:        256
+    cpu:           0
+    on_node:       web
+    ports:
+      - 8000:8000
+    public:        no
+    mounts:
+      - mailman_web_data:/opt/mailman-web-data
+  nginx:
+    description:   Nginx HTTP/HTTPS (private)
+    ecs_service:   yes
+    memory:        256
+    cpu:           0
+    on_node:       web
+    ports:
+      - 80:80
+      - 443:443
+    public:        no
+    mounts:
+      - acme_challenge:/var/www/acme:ro
+      - mailman_web_data:/opt/mailman-web-data:ro
+      - nginx_conf:/etc/nginx:ro
+      - nginx_html:/usr/share/nginx/html:ro
+      - tls_data:/etc/tls:ro
+  postfix:
+    description:   Postfix MTA (private)
+    ecs_service:   yes
+    memory:        256
+    cpu:           0
+    on_node:       mail
+    ports:
+      - 587:587
+    public:        no
+    mounts:
+      - postfix_data:/var/spool/postfix
+      - postfix_log:/var/log/postfix
+      - dkim_data:/etc/opendkim/keys:ro
+      - mailman_postmap:/var/data/mailman:ro
+      - postfix_init:/docker-init.db:ro
+      - tls_data:/etc/tls:ro

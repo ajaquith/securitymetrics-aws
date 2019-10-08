@@ -7,11 +7,11 @@
   pip:
     name: ['pyopenssl']
 
-# Generate self-signed TLS certificates
+# Generate self-signed TLS certificate for 'www' and 'mail' hosts.
 
 - name: "Create certificate directory"
   file:
-    path: "{{ certificate_data }}/{{ ec2_role }}"
+    path: "{{ tls_data }}"
     state: directory
     owner: root
     group: root
@@ -19,7 +19,7 @@
 
 - name: Generate private key for certificate
   openssl_privatekey:
-    path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
+    path: "{{ tls_data }}/privkey.pem"
     size: "{{ tls_key_size }}"
     owner: root
     group: root
@@ -27,12 +27,12 @@
 
 - name: Create request for self-signed certificate
   openssl_csr:
-    common_name: "{{ ec2_role }}.{{ public_domain }}"
-    country_name: "{{self_signed_country }}"
+    subject_alt_name: 'DNS:www.{{ public_domain }},DNS:mail.{{ public_domain }}'
     organization_name: "{{ self_signed_org }}"
     organizational_unit_name: "{{ self_signed_ou }}"
-    privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
-    path: "{{ certificate_data }}/{{ ec2_role }}/selfsigned-csr.pem"
+    country_name: "{{self_signed_country }}"
+    privatekey_path: "{{ tls_data }}/privkey.pem"
+    path: "{{ tls_data }}/selfsigned-csr.pem"
     owner: root
     group: root
     mode: "u=rw,g=r,o="
@@ -40,9 +40,9 @@
 - name: Generate self-signed certificate
   openssl_certificate:
     provider: selfsigned
-    csr_path: "{{ certificate_data }}/{{ ec2_role }}/selfsigned-csr.pem"
-    privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
-    path: "{{ certificate_data }}/{{ ec2_role }}/fullchain.pem"
+    csr_path: "{{ tls_data }}/selfsigned-csr.pem"
+    privatekey_path: "{{ tls_data }}/privkey.pem"
+    path: "{{ tls_data }}/fullchain.pem"
     owner: root
     group: root
     mode: "u=rw,g=r,o="
@@ -51,7 +51,7 @@
 
 - name: Generate Diffie-Hellman parameters for TLS
   openssl_dhparam:
-    path: "{{ certificate_data }}/{{ ec2_role }}/dhparams.pem"
+    path: "{{ tls_data }}/dhparams.pem"
     size: "{{ tls_key_size }}"
     owner: root
     group: root
@@ -97,7 +97,7 @@
 
 - name: Get current certificate info
   openssl_certificate_info:
-    path: "{{ certificate_data }}/{{ ec2_role }}/fullchain.pem"
+    path: "{{ tls_data }}/fullchain.pem"
     valid_at:
       in_one_month: "+30d"
   register: tls_certificate
@@ -145,9 +145,9 @@
         group: root
         mode: "u=rx,g=rx,o="
 
-    - name: "Create ACME challenge directory {{ acme_challenge_data }}"
+    - name: "Create ACME challenge directory {{ acme_challenge }}"
       file:
-        path: "{{ acme_challenge_data }}"
+        path: "{{ acme_challenge }}"
         state: directory
         owner: root
         group: root
@@ -166,9 +166,9 @@
   block:
     - name: Create request for Let's Encrypt TLS certificate
       openssl_csr:
-        path: "{{ certificate_data }}/{{ ec2_role }}/letsencrypt-csr.pem"
-        privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
-        common_name: "{{ ec2_role }}.{{ public_domain }}"
+        subject_alt_name: 'DNS:www.{{ public_domain }},DNS:mail.{{ public_domain }}'
+        path: "{{ tls_data }}/letsencrypt-csr.pem"
+        privatekey_path: "{{ tls_data }}/privkey.pem"
         owner: root
         group: root
         mode: "u=r,g=r,o="
@@ -194,16 +194,16 @@
         ports: "80:80"
         volumes:
           - "{{ acme_temp }}:/etc/nginx:ro"
-          - "{{ acme_challenge_data }}:/var/www/acme:ro"
+          - "{{ acme_challenge }}:/var/www/acme:ro"
     
     - name: Generate Let's Encrypt TLS certificate
       openssl_certificate:
         provider: acme
         acme_accountkey_path: "{{ letsencrypt_account_dir }}/account.key"
-        acme_challenge_path: "{{ acme_challenge_data }}"
-        path: "{{ certificate_data }}/{{ ec2_role }}/fullchain.pem"
-        csr_path: "{{ certificate_data }}/{{ ec2_role }}/letsencrypt-csr.pem"
-        privatekey_path: "{{ certificate_data }}/{{ ec2_role }}/privkey.pem"
+        acme_challenge_path: "{{ acme_challenge }}"
+        path: "{{ tls_data }}/fullchain.pem"
+        csr_path: "{{ tls_data }}/letsencrypt-csr.pem"
+        privatekey_path: "{{ tls_data }}/privkey.pem"
         owner: root
         group: root
         mode: "u=r,g=r,o="

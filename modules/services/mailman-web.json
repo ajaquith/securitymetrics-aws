@@ -1,38 +1,58 @@
 [
   {
-    "name": "mailman-core",
-    "image": "maxking/mailman-core",
+    "name": "mailman-web",
+    "image": "maxking/mailman-web",
     "memoryReservation": ${service.memory},
     "cpu": ${service.cpu},
     "essential": true,
     "environment": [
       {
-        "name": "DATABASE_CLASS",
-        "value": "mailman.database.postgresql.PostgreSQLDatabase"
-      },
-      {
         "name": "DATABASE_TYPE",
         "value": "postgres"
+      },
+      {
+        "name": "DJANGO_ALLOWED_HOSTS",
+        "value": "www.${public_domain}"
       },
       {
         "name": "HYPERKITTY_URL",
         "value": "http://mailman-web.${private_zone}:8000/hyperkitty/"
       },
       {
-        "name": "MAILMAN_REST_URL",
-        "value": "http://mailman-core.${private_zone}:8001"
+        "name": "MAILMAN_ADMIN_EMAIL",
+        "value": "${mailman_email}"
+      },
+      {
+        "name": "MAILMAN_ADMIN_USER",
+        "value": "${mailman_admin}"
+      },
+      {
+        "name": "MAILMAN_HOST",
+        "value": "mailman-core.${private_zone}"
       },
       {
         "name": "MAILMAN_REST_USER",
         "value": "${mailman_rest_user}"
       },
       {
-        "name": "MTA",
-        "value": "postfix"
+        "name": "MAILMAN_REST_URL",
+        "value": "http://mailman-core.${private_zone}:8001"
+      },
+      {
+        "name": "POSTORIUS_TEMPLATE_BASE_URL",
+        "value": "http://mailman-web.${private_zone}:8000"
+      },
+      {
+        "name": "SERVE_FROM_DOMAIN",
+        "value": "${public_domain}"
       },
       {
         "name": "SMTP_HOST",
         "value": "postfix.${private_zone}"
+      },
+      {
+        "name": "UWSGI_STATIC_MAP",
+        "value": "/static=/opt/mailman-web-data/static"
       }
     ],
     "secrets": [
@@ -47,6 +67,10 @@
       {
         "name": "MAILMAN_REST_PASSWORD",
         "valueFrom": "${secrets.mailman_rest_password}"
+      },
+      {
+        "name": "SECRET_KEY",
+        "valueFrom": "${secrets.django_secret_key}"
       }
     ],
     "mountPoints": [

@@ -126,15 +126,15 @@ The `keys` generates a self-signed TLS certificate for use with mail or web serv
 
 2. Adds a user and group, both named `certificate_user` and with the UID/GID `certificate_uid`, for handling certificates. The UID and GID default to 4000, which appear as 1000 inside containers.
 
-3. Creates the `certificate_data` directory for storing certificates, and changes user and group ownership to `certificate_user`. The owner has read-write permissions; the group is read-only.
+3. Creates the `tls_data` directory for storing certificates, and changes user and group ownership to `certificate_user`. The owner has read-write permissions; the group is read-only.
 
-4. Generates a TLS certificate private key `privkey.pem`, certificate signing request (CSR) `selfsigned-csr.pem`, and self-signed TLS certificate `fullchain.pem`, placing the results in `certificate_data`. The owner has read-write permissions; the group is read-only.
+4. Generates a TLS certificate private key `privkey.pem`, certificate signing request (CSR) `selfsigned-csr.pem`, and self-signed TLS certificate `fullchain.pem`, placing the results in `tls_data`. The owner has read-write permissions; the group is read-only.
 
 5. Creates a directory for DKIM keys, and then creates a PEM-encoded 2048-bit public-private key pair to be stored in it. The files are called  `{{ public_domain }}.private` and `{{ public_domain }}.public`, respectively. Owner and group have read-only permissions. _Note: the Ansible DKIM creation tasks do not specify an owner or group for the directory, or for any of the files within it; these default to `root`. Later roles (eg the `mailman` role sets ownership. This strategy allows Ansible to ensure that the files exist, without setting ownership here that is later overridden by `mailman` (which shows as a undesirable "change")._
 
 6. Creates the value of the DNS `TXT` DKIM record, which contains the public key. The content is derived from the DKIM public key file `{{ public_domain }}.public`, passed through a custom Ansible filter called `dkim_record`. This filter is stored in `mail_security/filter_plugins/dkim_record.py`. The output is stored in `{{ public_domain }}.txt`. As with the DKIM public and private keys, owner and group have read-only permissions but the names of owner and group are not specified; they default to `root`.
 
-7. If `letsencrypt_certificates` is true, installs the `openssl` package, `acme-tiny` for creating Let's Encrypt TLS certificates. The role also creates an account directory `letsencrypt_account_dir` and copies the Let's Encrypt account key to it, setting the permissions for the directory for read-write for the owner (`certificate_user`) and read-only for the group (also `certificate_user`).  It sets the permissions for the account key to read-only for the owner and group, and copies a templated ACME renewal script `renew_certs.sh` to the account directory. It creates an empty ACME challenge directory `acme_challenge_data` and sets its owner and group to `certificate_user`, with read-write privileges for owner and read for others. Finally, the role adds a `cron` job to run the renewal script on the first day of every month. 
+7. If `letsencrypt_certificates` is true, installs the `openssl` package, `acme-tiny` for creating Let's Encrypt TLS certificates. The role also creates an account directory `letsencrypt_account_dir` and copies the Let's Encrypt account key to it, setting the permissions for the directory for read-write for the owner (`certificate_user`) and read-only for the group (also `certificate_user`).  It sets the permissions for the account key to read-only for the owner and group, and copies a templated ACME renewal script `renew_certs.sh` to the account directory. It creates an empty ACME challenge directory `acme_challenge` and sets its owner and group to `certificate_user`, with read-write privileges for owner and read for others. Finally, the role adds a `cron` job to run the renewal script on the first day of every month. 
 
 8. If `letsencrypt_certificates` is true, and either the current TLS certificate is self-signed _or_ it expires in less than 30 days, the role creates a certificate-signing request using the Let's Encrypt account key, configures and starts a temporary Nginx web server container, generates a new certificate using `acme-tiny`, and tears down the container when it's done.
 
@@ -166,7 +166,7 @@ The `mailman` role is complex. It performs the following tasks:
 
 2. Configures the Mailman Core data directory `mailman_core`, which is bind-mounded into the container `mailman-core`. The user (UID 5100), created by the role, owns the directory and can read and write to it. The root group (GID 5000) is assigned to it and has read-only access. Inside the container, the user appears as `mailman` (UID 100), and the group appears as `root` (GID 0). _Note:_ a sub-directory `var/data` has the group ownership `5101` (in container: `mailman`, GID 101) with read-write access with the set-GID bit set. This allows Mailman to write its Postfix-specific LMTP address-mapping files, and ensure that they are group-owned by `mailman`.
 
-3. Copies a templated Mailman Core supplemental configuration file `mailman-extra.cfg` to `mailman_core`, which is bind-mounted into the `mailman-core` container. Its only function is to set the administrator's email to `mailman_admin_email`.
+3. Copies a templated Mailman Core supplemental configuration file `mailman-extra.cfg` to `mailman_core`, which is bind-mounted into the `mailman-core` container. Its only function is to set the administrator's email to `mailman_email`.
 
 4. Configures the Mailman Web data directory `mailman_web_data`, which is bind-mounded into the container `mailman-web`. The user (UID 5100), created by the role, owns the directory and can read and write to it. The group (GID 5101) is assigned to it and has read-only access. Inside the container, the user appears as `mailman` (UID 100), and the group appears as `mailman` (GID 101).
 
@@ -174,7 +174,7 @@ The `mailman` role is complex. It performs the following tasks:
 
 6. Configures the Postfix directories used for Initialization, data storage and logging, are bind-mounted into the container `postfix`. The user (UID 5000) owns the directories and can read and write to them. The group (GID 5000) is assigned to them and has read-only access. Inside the container, the user appears as `root` (UID 0), and the group appears as `root` (GID 0).
 
-5. Copies a templated Postfix configuration script `configure_postfix.sh` to the `postfix_init` directory. The `postfix` container runs this script right after initialization. It sets up [Mailman-specific transport maps](https://mailman.readthedocs.io/en/latest/src/mailman/docs/mta.html#postfix), configures TLS support to use the certificates stored in `certificate_data` (bind-mounted as `/etc/tls`), and tightens the configuration to make it slightly harder for spammers. The contents are based on [several](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/security_guide/sect-security_guide-server_security-securing_postfix) articles.
+5. Copies a templated Postfix configuration script `configure_postfix.sh` to the `postfix_init` directory. The `postfix` container runs this script right after initialization. It sets up [Mailman-specific transport maps](https://mailman.readthedocs.io/en/latest/src/mailman/docs/mta.html#postfix), configures TLS support to use the certificates stored in `tls_data` (bind-mounted as `/etc/tls`), and tightens the configuration to make it slightly harder for spammers. The contents are based on [several](https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/security_guide/sect-security_guide-server_security-securing_postfix) articles.
 
 6. Adds the users that the `postfix` and `nginx` containers run as at runtime to the group `certificate_user`. Postfix runs as UID 5100, which appears in-container as `postfix` (UID 100). Nginx runs as UID 5000, which appears in-container as `nginx` (UID 0). By adding these users to the group, the containers gain read access to the bind-mounted TLS certificate directory.
 
@@ -520,7 +520,6 @@ docker run --name mailman-web \
 ### nginx
 
 docker run --name nginx \
-    -v /opt/nginx/log:/var/log/nginx \
     -v /opt/keys/acme/challenge:/var/www/acme:ro \
     -v /opt/keys/tls:/etc/tls:ro \
     -v /opt/mailman/web:/opt/mailman-web-data:ro \
@@ -540,14 +539,13 @@ docker run --name nginx \
 |              | {{ mailman_core }}/var/data:/opt/mailman/var/data | 5100:5101 2750     | mailman[100]:users[100]     |
 | postfix      | {{ postfix_data }}:/var/spool/postfix             | 5000:5000 0711     | postfix[100]:root[0]        |
 |              | {{ postfix_log }}:/var/log/postfix                | 5100:5000 0711     | postfix[100]:root[0]        |
-|              | {{ certificate_data }}:/etc/tls:ro                | certs:certs 0750   | 1000:1000                   |
+|              | {{ tls_data }}:/etc/tls:ro                | certs:certs 0750   | 1000:1000                   |
 |              | {{ dkim_data }}:/etc/opendkim/keys:ro             | 5102:5103 750      | opendkim[102]:opendkim[103] |
 |              | {{ mailman_core }}/var/data:/var/data/mailman:ro  | 5100:5101 2750     | postfix[100]:101            |
 |              | {{ postfix_init }}:/docker-init.db/:ro            | 5100:5000 750      | postfix[100]:root[0]        |
 | mailman-web  | {{ mailman_web_data }}:/opt/mailman-web-data      | 5100:5101 750      | mailman[100]:mailman[101]   |
-| nginx        | {{ nginx_log }}:/var/log/nginx                    | 5000:5000 750      | root[0]:root[0]             |
-|              | {{ acme_challenge_data }}:/var/www/acme:ro        | certs:certs 750    | ?:root[0]                   |
-|              | {{ certificate_data }}:/etc/tls:ro                | certs:certs 750    | ?:?                         |
+|              | {{ acme_challenge }}:/var/www/acme:ro        | certs:certs 750    | ?:root[0]                   |
+|              | {{ tls_data }}:/etc/tls:ro                | certs:certs 750    | ?:?                         |
 |              | {{ mailman_web_data }}:/opt/mailman-web-data:ro   | 5100:5000 750      | nginx[100]:root[0]          |
 |              | {{ nginx_conf }}:/etc/nginx:ro                    | 0:3000 550         | ?:root[0]                   |
 |              | {{ nginx_html }}:/usr/share/nginx/html:ro         | 0:3000 550         | ?:root[0]                   |

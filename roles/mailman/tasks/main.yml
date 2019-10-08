@@ -77,9 +77,9 @@
     mode: "u=r,g=,o="
   notify: Restart postfix
 
-- name: "Make 'postfix' owner of STARTTLS keys directory {{ certificate_data }}/mail"
+- name: "Make 'postfix' owner of TLS keys directory {{ tls_data }}"
   file:
-    path: "{{ certificate_data }}/mail"
+    path: "{{ tls_data }}"
     state: directory
     owner: "{{ postfix_uid }}"
     group: "{{ postfix_gid }}"
@@ -99,13 +99,6 @@
     owner: "{{ nginx_uid }}"
     group: "{{ nginx_gid }}"
     mode: "u=rx,g=rx,o="
-
-- name: "Make Nginx owner of HTTPS keys directory {{ certificate_data }}/www"
-  file:
-    path: "{{ certificate_data }}/www"
-    state: directory
-    owner: "{{ nginx_uid }}"
-    group: "{{ nginx_gid }}"
 
 - name: Configure Nginx
   template:
@@ -173,7 +166,7 @@
 #          - "HYPERKITTY_API_KEY={{ hyperkitty_api_key }}"
 #          - "HYPERKITTY_URL=http://{{ mailman_web_host }}:8000/hyperkitty/"
 #          - "MAILMAN_ADMIN_USER={{ mailman_admin }}"
-#          - "MAILMAN_ADMIN_EMAIL={{ mailman_admin_email }}"
+#          - "MAILMAN_ADMIN_EMAIL={{ mailman_email }}"
 #          - "MAILMAN_REST_URL=http://{{ mailman_core_host }}:8001"
 #          - "MAILMAN_REST_USER={{ mailman_rest_user }}"
 #          - "MAILMAN_REST_PASSWORD={{ mailman_rest_password }}"
@@ -213,7 +206,7 @@
 #          volumes:
 #          - "{{ postfix_data }}:/var/spool/postfix"
 #          - "{{ postfix_log }}:/var/log/postfix"
-#          - "{{ certificate_data }}/mail:/etc/tls:ro"
+#          - "{{ tls_data }}:/etc/tls:ro"
 #          - "{{ dkim_data }}:/etc/opendkim/keys:ro"
 #          - "{{ mailman_core }}/var/data:/var/data/mailman:ro"
 #          - "{{ postfix_init }}:/docker-init.db:ro"
@@ -237,9 +230,8 @@
 #          depends_on:
 #          - mailman-web
 #          volumes:
-#          - "{{ nginx_log }}:/var/log/nginx"
-#          - "{{ acme_challenge_data }}:/var/www/acme:ro"
-#          - "{{ certificate_data }}/www:/etc/tls:ro"
+#          - "{{ acme_challenge }}:/var/www/acme:ro"
+#          - "{{ tls_data }}:/etc/tls:ro"
 #          - "{{ mailman_web_data }}:/opt/mailman-web-data:ro"
 #          - "{{ nginx_conf }}:/etc/nginx:ro"
 #          - "{{ nginx_html }}:/usr/share/nginx/html:ro"

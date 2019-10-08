@@ -1,27 +1,12 @@
 [
   {
-    "name": "postgres",
-    "image": "postgres:9.6-alpine",
+    "name": "nginx",
+    "image": "nginx:mainline-alpine",
     "memoryReservation": ${service.memory},
     "cpu": ${service.cpu},
     "essential": true,
-    "user": "postgres",
-    "environment": [
-      {
-        "name": "POSTGRES_DB",
-        "value": "${postgres_db}"
-      },
-      {
-        "name": "POSTGRES_USER",
-        "value": "${postgres_user}"
-      }
-    ],
-    "secrets": [
-      {
-        "name": "POSTGRES_PASSWORD",
-        "valueFrom": "${secrets.postgres_password}"
-      }
-    ],
+    "environment": [],
+    "secrets": [],
     "mountPoints": [
       %{ for mount in service.mounts ~}
       {

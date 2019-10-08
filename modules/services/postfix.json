@@ -1,27 +1,33 @@
 [
   {
-    "name": "postgres",
-    "image": "postgres:9.6-alpine",
+    "name": "postfix",
+    "image": "boky/postfix",
     "memoryReservation": ${service.memory},
     "cpu": ${service.cpu},
     "essential": true,
-    "user": "postgres",
     "environment": [
       {
-        "name": "POSTGRES_DB",
-        "value": "${postgres_db}"
+        "name": "ALLOWED_SENDER_DOMAINS",
+        "value": "${public_domain}"
       },
       {
-        "name": "POSTGRES_USER",
-        "value": "${postgres_user}"
-      }
-    ],
-    "secrets": [
+        "name": "HOSTNAME",
+        "value": "mail.${public_domain}"
+      },
       {
-        "name": "POSTGRES_PASSWORD",
-        "valueFrom": "${secrets.postgres_password}"
+        "name": "MASQUERADED_DOMAINS",
+        "value": "${public_domain}"
+      },
+      {
+        "name": "MESSAGE_SIZE_LIMIT",
+        "value": "${email_size_limit}"
+      },
+      {
+        "name": "MYNETWORKS",
+        "value": "${ec2_vpc_cidr}"
       }
     ],
+    "secrets": [],
     "mountPoints": [
       %{ for mount in service.mounts ~}
       {

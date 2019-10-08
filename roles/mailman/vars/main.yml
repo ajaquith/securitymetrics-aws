@@ -1,13 +1,3 @@
-# Host-side shared volumes
-mailman_web_data: /opt/mailman/web
-nginx_conf: /opt/nginx/conf
-nginx_html: /opt/nginx/html
-nginx_log: /opt/nginx/log
-postfix_init: /opt/postfix/init
-postfix_log: /opt/postfix/log
-postfix_data: /opt/postfix/data
-postgres_home: /opt/postgres
-
 # Users and groups: these should not be changed
 postgres_uid:  "70"
 postgres_gid:  "70"

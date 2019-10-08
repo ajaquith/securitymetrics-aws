@@ -19,13 +19,6 @@
   no_log: no
 
   pre_tasks:
-    - name: Get caller identity facts
-      local_action:
-        module: aws_caller_facts
-        profile: default
-      register: aws
-      run_once: yes
-      become: no
     - name: Set private zone
       set_fact:
         private_zone: "{{ ec2_env }}.local"
@@ -38,6 +31,7 @@
       when: is_ec2_env == true
     - import_role:
         name: keys
+      run_once: yes
     - import_role:
         name: mailman
       run_once: yes
