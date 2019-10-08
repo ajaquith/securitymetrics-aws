@@ -68,7 +68,7 @@ output "subnet_ids" {
                             values(aws_subnet.subnets)[*].id)
 }
 
-output "subnet_cidr_blocks" {
+output "subnet_blocks" {
   description      = "Map with keys = subnet names, and values = subnet CIDRs."
   value            = zipmap(keys(aws_subnet.subnets),
                             values(aws_subnet.subnets)[*].cidr_block)

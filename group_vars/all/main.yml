@@ -38,7 +38,7 @@ services:
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_role:       mail
+    on_node:       mail
     ports:
       - 5432:5432
     public:        no
@@ -49,7 +49,7 @@ services:
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_role:       mail
+    on_node:       mail
     ports:
       - 8001:8001
     public:        no

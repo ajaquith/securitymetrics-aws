@@ -37,15 +37,15 @@ resource "aws_instance" "www" {
   tags = {
     Name           = "${var.root.ec2_env}-www"
     Environment    = var.root.ec2_env
-    Role           = "www"
+    Node           = "www"
     EfsVolume      = var.efs_id
   }
   volume_tags = {
     Name           = "${var.root.ec2_env}-www"
     Environment    = var.root.ec2_env
-    Role           = "www"
+    Node           = "www"
   }
-  user_data        = file("roles/base/templates/ec2_init.sh")
+  user_data        = file("${path.module}/ec2_init.sh")
 }
 
 resource "aws_instance" "mail" {
@@ -60,15 +60,15 @@ resource "aws_instance" "mail" {
   tags = {
     Name           = "${var.root.ec2_env}-mail"
     Environment    = var.root.ec2_env
-    Role           = "mail"
+    Node           = "mail"
     EfsVolume      = var.efs_id
   }
   volume_tags = {
     Name           = "${var.root.ec2_env}-mail"
     Environment    = var.root.ec2_env
-    Role           = "mail"
+    Node           = "mail"
   }
-  user_data        = file("roles/base/templates/ec2_init.sh")
+  user_data        = file("${path.module}/ec2_init.sh")
 }
 
 ## --------- Ansible provisioner -----------------------------------------------
@@ -117,14 +117,14 @@ resource "aws_security_group" "ssh" {
 
 # ========== OUTPUT VARIABLES ==================================================
 
-output "role_private_ips" {
-  description      = "Map with keys = role names, and values = private IP addresses."
+output "private_ips" {
+  description      = "Map with keys = node names, and values = private IP addresses."
   value            = { "www": aws_instance.www.private_ip,
                        "mail": aws_instance.mail.private_ip }
 }
 
-output "role_public_ips" {
-  description      = "Map with keys = role names, and values = public IP addresses."
+output "public_ips" {
+  description      = "Map with keys = node names, and values = public IP addresses."
   value            = { "www": aws_instance.www.public_ip,
                        "mail": aws_instance.mail.public_ip }
 }

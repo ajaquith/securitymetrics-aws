@@ -12,7 +12,7 @@ variable "subnet_ids" {
   type = map(string)
 }
 
-variable "subnet_cidr_blocks" {
+variable "subnet_blocks" {
   type = map(string)
 }
 
@@ -42,14 +42,14 @@ resource "aws_security_group" "efs" {
     from_port      = 2049
     to_port        = 2049
     protocol       = "tcp"
-    cidr_blocks    = values(var.subnet_cidr_blocks)
+    cidr_blocks    = values(var.subnet_blocks)
   }
   egress {
     description    = "Any subnet"
     from_port      = 0
     to_port        = 0
     protocol       = "-1"
-    cidr_blocks    = values(var.subnet_cidr_blocks)
+    cidr_blocks    = values(var.subnet_blocks)
   }
   tags = {
     Name           = "${var.root.ec2_env}-efs-private"

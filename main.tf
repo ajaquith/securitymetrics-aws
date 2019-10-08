@@ -67,7 +67,7 @@ module "efs" {
   root             = local.root
   vpc_id           = module.vpc.vpc_id
   subnet_ids       = module.vpc.subnet_ids
-  subnet_cidr_blocks = module.vpc.subnet_cidr_blocks
+  subnet_blocks    = module.vpc.subnet_blocks
 }
 
 # Elastic Container Service (ECS) tasks and services
@@ -75,8 +75,8 @@ module "services" {
   source           = "./modules/services"
   root             = local.root
   vpc_id           = module.vpc.vpc_id
-  subnet_cidr_blocks = module.vpc.subnet_cidr_blocks
-  role_private_ips = module.instances.role_private_ips
+  subnet_blocks    = module.vpc.subnet_blocks
+  private_ips      = module.instances.private_ips
   execution_role   = module.roles.execution_role_arn
   secrets          = module.secrets.secrets
 }
@@ -96,12 +96,12 @@ module "instances" {
 
 output "host_mail" {
   description      = "Mail server IP address" 
-  value            = module.instances.role_public_ips["mail"]
+  value            = module.instances.public_ips["mail"]
 }
 
 output "host_www" {
   description      = "Web server IP address"
-  value            = module.instances.role_public_ips["www"]
+  value            = module.instances.public_ips["www"]
 }
 
 output "efs_id" {
