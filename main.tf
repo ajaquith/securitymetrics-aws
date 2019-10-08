@@ -60,7 +60,11 @@ module "services" {
   root             = local.root
   secrets          = module.secrets.secrets
   execution_role   = module.roles.execution_role_arn
+  vpc_id           = module.vpc.vpc_id
+  any_cidr_block   = module.vpc.any_cidr_block
+  subnet_cidr_blocks = module.vpc.subnet_cidr_blocks
 }
+
 
 # ========== RESOURCES =========================================================
 
@@ -174,7 +178,6 @@ resource "aws_instance" "mail" {
   }
   user_data        = file("roles/base/templates/ec2_init.sh")
 }
-
 
 resource "aws_route53_record" "private" {
   depends_on       = [aws_instance.www, aws_instance.mail]
