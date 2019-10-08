@@ -81,13 +81,13 @@ output "private_zone_id" {
 }
 
 output "subnet_ids" {
-  description      = "Map with keys = subnet names, and values = subnet IDs." 
+  description      = "Map with keys = subnet names, and values = subnet IDs."
   value            = zipmap(keys(aws_subnet.subnets),
                             values(aws_subnet.subnets)[*].id)
 }
 
 output "subnet_cidr_blocks" {
-  description      = "Map with keys = subnet names, and values = subnet CIDRs." 
+  description      = "Map with keys = subnet names, and values = subnet CIDRs."
   value            = zipmap(keys(aws_subnet.subnets),
                             values(aws_subnet.subnets)[*].cidr_block)
 }

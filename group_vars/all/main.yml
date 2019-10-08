@@ -8,9 +8,11 @@ import_archive:    no
 secrets_length:    32                            # Number of randomly generated chars in each secret
 generate_dh_param: yes
 
-# Variables shared with Ansible
+# Host bind-mount paths
 postgres_data:     /opt/postgres/data
 mailman_core:      /opt/mailman/core
+
+# Other variables shared with Ansible
 mailman_admin:     mailman
 mailman_rest_user: restadmin
 postgres_user:     postgres
@@ -27,7 +29,7 @@ secrets:
   postgres_password:
     description:   PostgresQL password.
 
-# Terraform auto-generates secrets and security groups for each items in the
+# Terraform auto-generates ECS tasks and security groups for each item in the
 # services: map. A service with 'public' == true is reachable from the Internet;
 # otherwise, the ports will only be reachable by hosts in the private subnet.
 services:
@@ -59,9 +61,6 @@ services:
 # private subnets.
 security_groups:
   public:
-    ssh:
-      ports:       [22]
-      description: SSH
     smtp:
       ports:       [25]
       description: SMTP

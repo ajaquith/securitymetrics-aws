@@ -4,11 +4,7 @@ variable "root" {
   type = any
 }
 
-variable "secrets" {
-  type = map(string)
-}
-
-variable "execution_role" {
+variable "vpc_id" {
   type = string
 }
 
@@ -20,8 +16,12 @@ variable "any_cidr_block" {
   type = string
 }
 
-variable "vpc_id" {
+variable "execution_role" {
   type = string
+}
+
+variable "secrets" {
+  type = map(string)
 }
 
 
@@ -74,7 +74,7 @@ resource "aws_ecs_service" "postgres" {
   }
   placement_constraints {
     type                     = "memberOf"
-    expression               = "attribute:Role == '${var.root.services["mailman-core"].on_role}'"
+    expression               = "attribute:Role == '${var.root.services["postgres"].on_role}'"
   }
   lifecycle {
     ignore_changes           = ["desired_count"]
@@ -82,6 +82,7 @@ resource "aws_ecs_service" "postgres" {
   tags = {
     Name                     = "${var.root.ec2_env}-postgres"
     Environment              = var.root.ec2_env
+    Role                     = var.root.services["postgres"].on_role
   }
 }
 
@@ -111,6 +112,7 @@ resource "aws_security_group" "tasks" {
   tags = {
     Name           = "${var.root.ec2_env}-${each.key}-${each.value.public ? "public" : "private"}"
     Environment    = var.root.ec2_env
+    Role           = each.value.on_role
   }
 }
 

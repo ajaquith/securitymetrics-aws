@@ -58,71 +58,25 @@ module "efs" {
 module "services" {
   source           = "./modules/services"
   root             = local.root
-  secrets          = module.secrets.secrets
-  execution_role   = module.roles.execution_role_arn
   vpc_id           = module.vpc.vpc_id
-  any_cidr_block   = module.vpc.any_cidr_block
   subnet_cidr_blocks = module.vpc.subnet_cidr_blocks
+  any_cidr_block   = module.vpc.any_cidr_block
+  execution_role   = module.roles.execution_role_arn
+  secrets          = module.secrets.secrets
+}
+
+# EC2 Instances
+module "instances" {
+  source           = "./modules/instances"
+  root             = local.root
+  vpc_id           = module.vpc.vpc_id
+  subnet_ids       = module.vpc.subnet_ids
+  any_cidr_block   = module.vpc.any_cidr_block
+  instance_profile = module.roles.iam_instance_profile
 }
 
 
 # ========== RESOURCES =========================================================
-
-## --------- Security groups ---------------------------------------------------
-
-resource "aws_security_group" "public" {
-  for_each         = local.root.security_groups["public"]
-  name             = "${local.root.ec2_env}-${each.key}-public"
-  description      = each.value.description
-  vpc_id           = module.vpc.vpc_id
-  dynamic "ingress" {
-    for_each       = each.value.ports
-    content {
-      from_port    = ingress.value
-      to_port      = ingress.value
-      protocol     = "tcp"
-      cidr_blocks  = [module.vpc.any_cidr_block]
-    }
-  }
-  egress {
-    description    = "All IPv4"
-    from_port      = 0
-    to_port        = 0
-    protocol       = "-1"
-    cidr_blocks    = [module.vpc.any_cidr_block]
-  }
-  tags = {
-    Name           = "${local.root.ec2_env}-${each.key}-public"
-    Environment    = local.root.ec2_env
-  }
-}
-
-resource "aws_security_group" "private" {
-  for_each         = local.root.security_groups["private"]
-  name             = "${local.root.ec2_env}-${each.key}-private"
-  description      = each.value.description
-  vpc_id           = module.vpc.vpc_id
-  dynamic "ingress" {
-    for_each       = each.value.ports
-    content {
-      from_port    = ingress.value
-      to_port      = ingress.value
-      protocol     = "tcp"
-      cidr_blocks  = values(module.vpc.subnet_cidr_blocks)
-    }
-  }
-  egress {
-    description    = "Any subnet"
-    from_port      = 0
-    to_port        = 0
-    protocol       = "-1"
-    cidr_blocks    = values(module.vpc.subnet_cidr_blocks)
-  }
-  tags = {
-    Name           = "${local.root.ec2_env}-${each.key}-private"
-    Environment    = local.root.ec2_env
-  }
-}
 
 ## --------- Instances ---------------------------------------------------------
 
@@ -132,9 +86,7 @@ resource "aws_instance" "www" {
   ami              = local.root.ec2_instance_ami
   instance_type    = local.root.ec2_instance_type
   iam_instance_profile = module.roles.iam_instance_profile
-  vpc_security_group_ids = [aws_security_group.public["ssh"].id,
-                      aws_security_group.public["https"].id,
-                      aws_security_group.private["mailman-web"].id]
+  vpc_security_group_ids = [module.instances.ssh_security_group_id]
   monitoring       = true
   subnet_id        = module.vpc.subnet_ids["subnet1"]
   associate_public_ip_address = true
@@ -158,10 +110,7 @@ resource "aws_instance" "mail" {
   ami              = local.root.ec2_instance_ami
   instance_type    = local.root.ec2_instance_type
   iam_instance_profile = module.roles.iam_instance_profile
-  vpc_security_group_ids = [aws_security_group.public["ssh"].id,
-                      aws_security_group.public["smtp"].id,
-                      aws_security_group.private["postgres"].id,
-                      aws_security_group.private["mailman-core"].id]
+  vpc_security_group_ids = [module.instances.ssh_security_group_id]
   monitoring       = true
   subnet_id        = module.vpc.subnet_ids["subnet2"]
   associate_public_ip_address = true
