@@ -2,9 +2,10 @@
   {
     "name": "postgres",
     "image": "postgres:9.6-alpine",
-    "memoryReservation": 256,
-    "cpu": 0,
+    "memoryReservation": ${service.memory},
+    "cpu": ${service.cpu},
     "essential": true,
+    "user": "postgres",
     "environment": [
       {
         "name": "POSTGRES_DB",
@@ -15,25 +16,28 @@
         "value": "${postgres_user}"
       }
     ],
-    "mountPoints": [
-      {
-        "containerPath": "/var/lib/postgresql/data",
-        "sourceVolume": "postgres_data"
-      }
-    ],
-    "user": "postgres",
-    "portMappings": [
-      {
-        "hostPort": 5432,
-        "containerPort": 5432,
-        "protocol": "tcp"
-      }
-    ],
     "secrets": [
       {
         "name": "POSTGRES_PASSWORD",
         "valueFrom": "${secrets.postgres_password}"
       }
+    ],
+    "mountPoints": [
+      %{ for mount in service.mounts ~}
+      {
+        "sourceVolume": "${split(":", mount)[0]}",
+        "containerPath": "${split(":", mount)[1]}"
+      }%{ if index(service.mounts, mount) + 1 < length(service.mounts) },%{ endif }
+      %{ endfor ~} 
+    ],
+    "portMappings": [
+      %{ for port in service.ports ~}
+      {
+        "hostPort": ${split(":", port)[0]},
+        "containerPort": ${split(":", port)[1]},
+        "protocol": "tcp"
+      }%{ if index(service.ports, port) + 1 < length(service.ports) },%{ endif }
+      %{ endfor ~} 
     ]
   }
 ]

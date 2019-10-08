@@ -17,14 +17,6 @@ provider "aws" {
 
 # ========== DATA SOURCES (looked up by ID) ====================================
 
-data "aws_iam_user" "cloudadmin" {
-  user_name        = "cloudadmin"
-}
-
-data "aws_iam_group" "cloudadmins" {
-  group_name       = "Cloudadmins"
-}
-
 data "aws_route53_zone" "public" {
   name             = "${local.root.public_domain}."
   private_zone     = false

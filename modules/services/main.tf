@@ -27,17 +27,45 @@ resource "aws_ecs_cluster" "ecs" {
 resource "aws_ecs_task_definition" "postgres" {
   family                     = "postgres"
   container_definitions      = templatefile("${path.module}/postgres.json",
-                                            merge(var.root, { secrets: var.secrets }))
+                                            merge(var.root,
+                                                  { secrets: var.secrets,
+                                                    service: var.root.services["postgres"]}))
   execution_role_arn         = var.execution_role
   network_mode               = "host"
-  memory                     = "256"
-  volume {
-    name                     = "postgres_data"
-    host_path                = var.root.postgres_data
+  memory                     = "${var.root.services["postgres"].memory}"
+  dynamic "volume" {
+    for_each = var.root.services["postgres"].mounts
+    content {
+      name                   = "${split(":", volume.value)[0]}"
+      host_path              = "${var.root[split(":", volume.value)[0]]}"
+    }
   }
   requires_compatibilities   = [ "EC2" ]
   tags = {
     Name                     = "${var.root.ec2_env}-postgres"
+    Environment              = var.root.ec2_env
+  }
+}
+
+resource "aws_ecs_task_definition" "mailman-core" {
+  family                     = "mailman-core"
+  container_definitions      = templatefile("${path.module}/mailman-core.json",
+                                            merge(var.root,
+                                                  { secrets: var.secrets,
+                                                    service: var.root.services["mailman-core"]}))
+  execution_role_arn         = var.execution_role
+  network_mode               = "host"
+  memory                     = "${var.root.services["mailman-core"].memory}"
+  dynamic "volume" {
+    for_each = var.root.services["mailman-core"].mounts
+    content {
+      name                   = "${split(":", volume.value)[0]}"
+      host_path              = "${var.root[split(":", volume.value)[0]]}"
+    }
+  }
+  requires_compatibilities   = [ "EC2" ]
+  tags = {
+    Name                     = "${var.root.ec2_env}-mailman-core"
     Environment              = var.root.ec2_env
   }
 }
@@ -55,31 +83,13 @@ resource "aws_ecs_service" "postgres" {
   }
   placement_constraints {
     type                     = "memberOf"
-    expression               = "attribute:Role == 'mail'"
+    expression               = "attribute:Role == '${var.root.services["mailman-core"].placement}'"
   }
   lifecycle {
     ignore_changes           = ["desired_count"]
   }
   tags = {
     Name                     = "${var.root.ec2_env}-postgres"
-    Environment              = var.root.ec2_env
-  }
-}
-
-resource "aws_ecs_task_definition" "mailman-core" {
-  family                     = "mailman-core"
-  container_definitions      = templatefile("${path.module}/mailman-core.json",
-                                            merge(var.root, { secrets: var.secrets }))
-  execution_role_arn         = var.execution_role
-  network_mode               = "host"
-  memory                     = "256"
-  volume {
-    name                     = "mailman_core"
-    host_path                = var.root.mailman_core
-  }
-  requires_compatibilities   = [ "EC2" ]
-  tags = {
-    Name                     = "${var.root.ec2_env}-mailman-core"
     Environment              = var.root.ec2_env
   }
 }
