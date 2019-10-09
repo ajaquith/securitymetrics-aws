@@ -30,7 +30,8 @@ mailman_rest_user: restadmin
 postgres_user:     postgres
 postgres_db:       mailmandb
 
-# Terraform auto-generates randomized secrets for each item in the secrets: map
+# The Terraform module 'secrets' auto-generates randomized secrets for each
+# item in the 'secrets' map below.
 secrets:
   django_secret_key:
     description:   Django secret key.
@@ -41,16 +42,25 @@ secrets:
   postgres_password:
     description:   PostgresQL password.
 
-# Terraform auto-generates ECS tasks and security groups for each item in the
-# services: map. A service with 'public' == true is reachable from the Internet;
-# otherwise, the ports will only be reachable by hosts in the private subnet.
+# The Terraform module 'instances' auto-generates EC2 instances for each item
+# in the 'instances' map below. The keys are assigned to the instances' Node
+# tags; the values supply the subnet the instances are placed in. The subnets
+# are defined in the environment-specific var files.
+instances:
+  www:             subnet1
+  mail:            subnet2
+
+# The Terraform module 'services' auto-generates ECS tasks and security groups
+# for each item in the 'services' map below. A service with 'public' == true
+# is reachable from the Internet; otherwise, the ports will only be reachable
+# by hosts in private subnets (see the 'subnets' map).
 services:
   postgres:
     description:   PostgreSQL (private)
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_node:       mail
+    place_on_node: mail
     ports:
       - 5432:5432
     public:        no
@@ -61,7 +71,7 @@ services:
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_node:       mail
+    place_on_node: mail
     ports:
       - 8001:8001
     public:        no
@@ -72,7 +82,7 @@ services:
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_node:       web
+    place_on_node: www
     ports:
       - 8000:8000
     public:        no
@@ -83,7 +93,7 @@ services:
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_node:       web
+    place_on_node: www
     ports:
       - 80:80
       - 443:443
@@ -99,7 +109,7 @@ services:
     ecs_service:   yes
     memory:        256
     cpu:           0
-    on_node:       mail
+    place_on_node: mail
     ports:
       - 587:587
     public:        no

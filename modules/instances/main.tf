@@ -25,48 +25,26 @@ variable "instance_profile" {
 
 ## --------- EC2 instances -----------------------------------------------------
 
-resource "aws_instance" "www" {
+resource "aws_instance" "nodes" {
+  for_each         = var.root.instances
   key_name         = var.root.ec2_ssh_key_name
   ami              = var.root.ec2_instance_ami
   instance_type    = var.root.ec2_instance_type
   iam_instance_profile       = var.instance_profile
   vpc_security_group_ids     = [aws_security_group.ssh.id]
   monitoring       = true
-  subnet_id        = var.subnet_ids["subnet1"]
+  subnet_id        = var.subnet_ids[each.value]
   associate_public_ip_address = true
   tags = {
-    Name           = "${var.root.ec2_env}-www"
+    Name           = "${var.root.ec2_env}-${each.key}"
     Environment    = var.root.ec2_env
-    Node           = "www"
+    Node           = each.key
     EfsVolume      = var.efs_id
   }
   volume_tags = {
-    Name           = "${var.root.ec2_env}-www"
+    Name           = "${var.root.ec2_env}-${each.key}"
     Environment    = var.root.ec2_env
-    Node           = "www"
-  }
-  user_data        = file("${path.module}/ec2_init.sh")
-}
-
-resource "aws_instance" "mail" {
-  key_name         = var.root.ec2_ssh_key_name
-  ami              = var.root.ec2_instance_ami
-  instance_type    = var.root.ec2_instance_type
-  iam_instance_profile       = var.instance_profile
-  vpc_security_group_ids     = [aws_security_group.ssh.id]
-  monitoring       = true
-  subnet_id        = var.subnet_ids["subnet2"]
-  associate_public_ip_address = true
-  tags = {
-    Name           = "${var.root.ec2_env}-mail"
-    Environment    = var.root.ec2_env
-    Node           = "mail"
-    EfsVolume      = var.efs_id
-  }
-  volume_tags = {
-    Name           = "${var.root.ec2_env}-mail"
-    Environment    = var.root.ec2_env
-    Node           = "mail"
+    Node           = each.key
   }
   user_data        = file("${path.module}/ec2_init.sh")
 }
@@ -76,7 +54,7 @@ resource "aws_instance" "mail" {
 resource "null_resource" "instances" {
   # Changes to any instance of the cluster requires re-provisioning
   triggers = {
-    instance_ids = "${join(",", aws_instance.www.*.id, aws_instance.mail.*.id)}"
+    instance_ids = "${join(",", [for node in aws_instance.nodes: node.id]) }"
   }
 
   provisioner "local-exec" {
@@ -119,12 +97,10 @@ resource "aws_security_group" "ssh" {
 
 output "private_ips" {
   description      = "Map with keys = node names, and values = private IP addresses."
-  value            = { "www": aws_instance.www.private_ip,
-                       "mail": aws_instance.mail.private_ip }
+  value            = { for i in aws_instance.nodes: i.tags["Node"] => i.private_ip }
 }
 
 output "public_ips" {
   description      = "Map with keys = node names, and values = public IP addresses."
-  value            = { "www": aws_instance.www.public_ip,
-                       "mail": aws_instance.mail.public_ip }
+  value            = { for i in aws_instance.nodes: i.tags["Node"] => i.public_ip }
 }

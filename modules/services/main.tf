@@ -76,7 +76,7 @@ resource "aws_ecs_service" "postgres" {
   }
   placement_constraints {
     type                     = "memberOf"
-    expression               = "attribute:Node == '${var.root.services["postgres"].on_node}'"
+    expression               = "attribute:Node == '${var.root.services["postgres"].place_on_node}'"
   }
   lifecycle {
     ignore_changes           = ["desired_count"]
@@ -84,7 +84,7 @@ resource "aws_ecs_service" "postgres" {
   tags = {
     Name                     = "${var.root.ec2_env}-postgres"
     Environment              = var.root.ec2_env
-    Node                     = var.root.services["postgres"].on_node
+    Node                     = var.root.services["postgres"].place_on_node
   }
 }
 
@@ -114,7 +114,7 @@ resource "aws_security_group" "tasks" {
   tags = {
     Name           = "${var.root.ec2_env}-${each.key}-${each.value.public ? "public" : "private"}"
     Environment    = var.root.ec2_env
-    Node           = each.value.on_node
+    Node           = each.value.place_on_node
   }
 }
 
@@ -132,15 +132,12 @@ resource "aws_route53_zone" "private" {
 }
 
 resource "aws_route53_record" "private" {
-  for_each         = { mailman-web:  var.private_ips["www"],
-                       mailman-core: var.private_ips["mail"],
-                       postfix:      var.private_ips["mail"],
-                       postgres:     var.private_ips["mail"] }
+  for_each         = var.root.services
   zone_id          = aws_route53_zone.private.zone_id
   name             = "${each.key}.${var.root.private_zone}"
   type             = "A"
   ttl              = "300"
-  records          = [each.value]
+  records          = [var.private_ips[each.value.place_on_node]]
   allow_overwrite  = true
 }
 

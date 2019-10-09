@@ -70,6 +70,16 @@ module "efs" {
   subnet_blocks    = module.vpc.subnet_blocks
 }
 
+# EC2 Instances
+module "instances" {
+  source           = "./modules/instances"
+  root             = local.root
+  vpc_id           = module.vpc.vpc_id
+  subnet_ids       = module.vpc.subnet_ids
+  efs_id           = module.efs.id
+  instance_profile = module.roles.iam_instance_profile
+}
+
 # Elastic Container Service (ECS) tasks and services
 module "services" {
   source           = "./modules/services"
@@ -81,27 +91,17 @@ module "services" {
   secrets          = module.secrets.secrets
 }
 
-# EC2 Instances
-module "instances" {
-  source           = "./modules/instances"
-  root             = local.root
-  vpc_id           = module.vpc.vpc_id
-  subnet_ids       = module.vpc.subnet_ids
-  efs_id           = module.efs.id
-  instance_profile = module.roles.iam_instance_profile
-}
-
 
 # ========== OUTPUT VARIABLES ==================================================
 
-output "host_mail" {
-  description      = "Mail server IP address" 
-  value            = module.instances.public_ips["mail"]
+output "public_ips" {
+  description      = "Public IP addresses"
+  value            = module.instances.public_ips
 }
 
-output "host_www" {
-  description      = "Web server IP address"
-  value            = module.instances.public_ips["www"]
+output "private_ips" {
+  description      = "Private IP addresses"
+  value            = module.instances.private_ips
 }
 
 output "efs_id" {
