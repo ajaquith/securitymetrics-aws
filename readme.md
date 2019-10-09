@@ -50,7 +50,7 @@ The Terraform plan:
 
 7. Registers a DNS `A` record with Amazon Route 53 in the `public_domain` hosted DNS zone, with the record's name set to `www`.`_public_domain_` and the value set to the Elastic IP address.
 
-After Terraform creates the EC2 node, the Ansible playbook `playbook_ec2.yml` configures it (see the next section). Integration with Ansible is achieved as follows. The Terraform configuration declares a `local-exec` provisioner that runs the `ansible-playbook` command to execute a playbook (default: `playbook_ec2.yml`).
+After Terraform creates the EC2 node, the Ansible playbook `playbook.yml` configures it (see the next section). Integration with Ansible is achieved as follows. The Terraform configuration declares a `local-exec` provisioner that runs the `ansible-playbook` command to execute a playbook (default: `playbook.yml`).
 
 As part of the command options, Terraform specifies a dynamic inventory file (default: `hosts_ec2.yml`) that retrieves metadata about all EC2 instances from AWS, using the AWS `Environment` tag to group hosts. For example, if an EC2 instance has the Environment tag `staging`, it is grouped in Ansible into the `staging` group.
 
@@ -62,7 +62,7 @@ The production site is not running yet.
 
 # Configuration
 
-The Ansible playbook `playbook_ec2.yml` configures the test, dev and prod production machines in three steps. The playbook:
+The Ansible playbook `playbook.yml` configures the test, dev and prod production machines in three steps. The playbook:
 
 1. __Bootstraps Ansible by installing Python__ onto the machine. Because the machine is on Alpine Linux, Python is not installed by default. In order to do this, we suppress Ansible's initial fact-fathering and then run `apk` to add the `python3` package if it is not already installed. After Python is installed, Ansible collects its facts as usual. If the string `amazon` is found in the Ansible host fact `ansible_bios_version`, the variable `is_ec2_env` is set to `true` so that other tasks can use it.
 
@@ -323,7 +323,7 @@ Supply the AWS Access Key ID, AWS Secret Access Key from the `.csv` file. This w
 
 5. Change to the `securitymetrics` project and verify that the Ansible EC2 inventory plugin can read its inventory:
 
-        ansible-inventory -i hosts_aws_ec2.yml --graph
+        ansible-inventory -i --graph
         
 ...which should produce output similar to this:
 

@@ -1,41 +1,40 @@
-- hosts:  all
+#
+# Simple playbook for Amazon Web Services EC2 hosts. It detects the current
+# Terraform environment by reading .terraform/environment. Then, it loads
+# default and environment-specific vars from env_vars.
+#
+# When run inside Terraform:
+#
+#         ansible-playbook \
+#             --ssh-extra-args='-o StrictHostKeyChecking=no' \
+#             playbook.yml
+#
+# When run from the command line:
+# 
+#         ansible-playbook playbook.yml
+#
+- hosts:  "{{ lookup('file', '{{ playbook_dir }}/.terraform/environment') }}"
   become: yes
-  gather_facts: no
+  gather_facts: yes
   no_log: no
 
   pre_tasks:
-    - name: Bootstrap Python3 onto host
-      raw: test -e /usr/bin/python3 || (apk update && apk add python3)
-      register: output
-      changed_when: output.stdout != ""
-    - name: Gather facts
-      setup:
-    - set_fact:
-        is_ec2_env: "{{ 'amazon' in ansible_bios_version }}"
-
+    - name: Set private zone
+      set_fact:
+        private_zone: "{{ ec2_env }}.local"
+  
   tasks:
     - import_role:
         name: base
-    - include_role:
-        name: amazon
-        tasks_from: cloudwatch-logs
-      when: is_ec2_env == true
     - import_role:
-        name: docker
+        name: amazon
+      when: is_ec2_env == true
     - import_role:
         name: keys
+      run_once: yes
     - import_role:
         name: mailman
-    - import_role:
-        name: amazon
-        tasks_from: update_dns
-      when: is_ec2_env == true
+      run_once: yes
     - import_role:
         name: import_archive
       when: import_archive == true
-
-  post_tasks:
-    - name: Remove developer tools
-      apk:
-        name: ['gcc', 'make']
-        state: absent

@@ -1,3 +1,0 @@
-public_domain: devbox.local                              # Domain of mailman, webserver, etc. (eg 'testbox.local', 'securitymetrics.org')
-import_archive: false
-letsencrypt_certificates: false

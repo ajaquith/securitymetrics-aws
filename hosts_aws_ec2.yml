@@ -3,6 +3,9 @@
 # The basic stratgy of this inventory file is to use the AWS tag 'Environment'
 # to determine the group the EC2 host belongs to.
 #
+# Note: this file MUST end with 'aws_ec2.yml' in order for Ansible to detect it
+# properly. See: https://docs.ansible.com/ansible/latest/plugins/inventory.html
+#
 plugin: aws_ec2
 boto_profile: default
 

@@ -30,4 +30,4 @@ S3 bucket for state storage is:
 
 Running the provisioning playbook for the current environment, using the default SSH key and remote user as defined in `ansible.cfg`:
 
-        ansible-playbook playbook_ec2.yml
+        ansible-playbook playbook.yml

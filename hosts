@@ -1,8 +1,0 @@
-devbox ansible_host=127.0.0.1 ansible_port=2222 ansible_user=vagrant ansible_become=true ansible_private_key_file='{{ playbook_dir }}/.vagrant/machines/devbox/virtualbox/private_key'
-testbox ansible_host=staging.markerbench.com ansible_port=22 ansible_user=alpine ansible_become=true ansible_private_key_file='~/.ssh/id_rsa'
-
-[dev]
-devbox
-
-[testing]
-testbox
