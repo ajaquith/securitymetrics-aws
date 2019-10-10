@@ -63,9 +63,10 @@ resource "aws_ecs_task_definition" "tasks" {
   }
 }
 
-resource "aws_ecs_service" "postgres" {
-  name                       = "postgres"
-  task_definition            = aws_ecs_task_definition.tasks["postgres"].arn
+resource "aws_ecs_service" "services" {
+  for_each                   = var.root.services
+  name                       = each.key
+  task_definition            = aws_ecs_task_definition.tasks[each.key].arn
   launch_type                = "EC2"
   scheduling_strategy        = "REPLICA"
   desired_count              = 1
@@ -76,15 +77,15 @@ resource "aws_ecs_service" "postgres" {
   }
   placement_constraints {
     type                     = "memberOf"
-    expression               = "attribute:Node == '${var.root.services["postgres"].place_on_node}'"
+    expression               = "attribute:Node == '${var.root.services[each.key].place_on_node}'"
   }
   lifecycle {
     ignore_changes           = ["desired_count"]
   }
   tags = {
-    Name                     = "${var.root.ec2_env}-postgres"
+    Name                     = "${var.root.ec2_env}-${each.key}"
     Environment              = var.root.ec2_env
-    Node                     = var.root.services["postgres"].place_on_node
+    Node                     = var.root.services[each.key].place_on_node
   }
 }
 
